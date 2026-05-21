@@ -19,7 +19,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-a855f7)](CONTRIBUTING.md)
 [![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-f59e0b)](requirements.txt)
 
-[Quick Start](#-quick-start) · [How It Works](#-how-it-works) · [Python API](#-python-api) · [CLI Reference](#-cli-reference) · [All Providers](#-supported-providers)
+[Quick Start](#-quick-start) · [Benchmarks](#-benchmarks) · [How It Works](#-how-it-works) · [Python API](#-python-api) · [CLI Reference](#-cli-reference) · [All Providers](#-supported-providers)
 
 </div>
 
@@ -283,14 +283,54 @@ bash setup.sh --model claude ./other   # target a different directory
 
 ---
 
-## 📊 Measured savings
+## 📊 Benchmarks
 
-| Workflow | Before | After | Reduction |
-|---|---|---|---|
-| Claude Code — 20-turn feature build | ~85k tokens | ~22k tokens | **74%** |
-| OpenAI GPT-4o — complex refactor | ~120k tokens | ~38k tokens | **68%** |
-| Ollama Llama3 — local coding session | ~40k ctx | ~11k ctx | **73%** |
-| Any LLM — code review | ~18k tokens | ~6k tokens | **67%** |
+Real measurements. No mocks. Full results and reproduction steps in [`benchmarks/results.md`](benchmarks/results.md).
+
+### Token estimation accuracy
+
+Distill uses tiktoken's `cl100k_base` encoder. Across every file type tested — inline comments, full adapters, 50 KB lock file slices, large Python files — error vs ground truth is **0.00%**.
+
+| Sample | Chars | Error | Time |
+|---|---:|---:|---:|
+| Inline comment             |       41 | **0.0%** |  8.5 ms |
+| Full adapter file (~8 KB)  |    7,768 | **0.0%** |  1.1 ms |
+| Lock file slice (50 KB)    |   50,000 | **0.0%** |  9.7 ms |
+| Large Python file (~35 KB) |   35,000 | **0.0%** |  5.0 ms |
+
+### Scan throughput
+
+| Project | Files | Tokens | Time | Throughput |
+|---|---:|---:|---:|---:|
+| distill (this repo, small)     |    26 |     33,374 |   21 ms | 1,264 files/s · 1.62 M tok/s |
+| TradingAgents (Python, medium) |    85 |     85,412 |   51 ms | 1,655 files/s · 1.66 M tok/s |
+| vaathi-main (Next.js, large)   |   520 | 1,876,732 | 1,028 ms |   506 files/s · 1.83 M tok/s |
+
+### .llmignore waste elimination — vaathi-main (real Next.js project)
+
+| | Tokens | % of Claude 200k context |
+|---|---:|---:|
+| Before `.llmignore` | 1,876,732 | **938.4%** (9× over limit) |
+| After `.llmignore`  | 1,315,353 | 657.7% |
+| **Eliminated**      | **561,379** | **29.9%** |
+
+Top waste found: `package-lock.json` (122k tokens), `tsconfig.tsbuildinfo` (103k), XML schema files (160k+).
+
+### Compaction — input tokens per turn (10-turn session)
+
+Compaction applied at turn 4, compressing history to ~18%:
+
+| | Input tokens |
+|---|---:|
+| 10 turns without compaction | 37,760 |
+| 10 turns with compaction    | 21,572 |
+| **Saved**                   | **16,188 (42.9%)** |
+
+```bash
+# Reproduce all benchmarks yourself
+python3 benchmarks/run_benchmarks.py
+python3 benchmarks/run_benchmarks.py --path /your/project
+```
 
 ---
 
