@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "distill-llm"
+version = "0.1.0"
+description = "Universal token optimization toolkit for Claude, OpenAI, Gemini, and Ollama"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "bbinfosec", email = "vickytestssec@gmail.com" }]
+keywords = ["llm", "tokens", "optimization", "claude", "openai", "ollama", "ai", "cost"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# Core tools work with zero dependencies — all extras are optional
+dependencies = []
+
+[project.optional-dependencies]
+tiktoken = ["tiktoken>=0.7.0"]
+claude   = ["anthropic>=0.40.0"]
+openai   = ["openai>=1.50.0"]
+gemini   = ["google-generativeai>=0.8.0"]
+all      = ["tiktoken>=0.7.0", "anthropic>=0.40.0", "openai>=1.50.0", "google-generativeai>=0.8.0"]
+dev      = ["pytest>=8.0.0", "tiktoken>=0.7.0"]
+
+[project.urls]
+Homepage   = "https://github.com/bb1nfosec/distill"
+Repository = "https://github.com/bb1nfosec/distill"
+Issues     = "https://github.com/bb1nfosec/distill/issues"
+Changelog  = "https://github.com/bb1nfosec/distill/blob/main/CHANGELOG.md"
+
+[project.scripts]
+distill-count   = "core.token_counter:main"
+distill-analyze = "core.context_analyzer:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,4 +1,4 @@
-# Contributing to TokenWise
+# Contributing to Distill
 
 Thanks for helping make LLM sessions cheaper for everyone.
 
@@ -12,8 +12,8 @@ Thanks for helping make LLM sessions cheaper for everyone.
 ## Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/tokenwise
-cd tokenwise
+git clone https://github.com/bb1nfosec/distill
+cd distill
 pip install -r requirements.txt
 python3 core/token_counter.py --path .   # verify it works
 ```
@@ -36,7 +36,6 @@ class YourAdapter(BaseLLMAdapter):
         return len(text) // 4
 
     def _call_api(self, messages: list[dict], **kwargs) -> CompletionResult:
-        # Make your API call here
         response = your_client.complete(messages)
         return CompletionResult(
             content=response.text,
@@ -50,7 +49,7 @@ class YourAdapter(BaseLLMAdapter):
 
 ## PR checklist
 
-- [ ] `python3 core/token_counter.py --path .` still works
+- [ ] `python3 core/token_counter.py --path .` runs without errors
 - [ ] `python3 scripts/generate_config.py --output /tmp/test --model all --dry-run` works
-- [ ] New adapter includes docstring with usage example
-- [ ] New docs added to `docs/` if applicable
+- [ ] New adapter includes docstring with a usage example
+- [ ] New docs added to `docs/` if the behaviour is non-obvious

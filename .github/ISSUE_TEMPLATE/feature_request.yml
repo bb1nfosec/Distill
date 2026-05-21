@@ -1,0 +1,41 @@
+name: Feature Request
+description: Suggest an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Check [open issues](https://github.com/bb1nfosec/distill/issues) first to avoid duplicates.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation that makes this valuable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New LLM adapter
+        - Token counter / analyzer
+        - Config generation
+        - CLI / setup script
+        - Documentation
+        - Other
+    validations:
+      required: true
