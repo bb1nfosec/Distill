@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+"""
+context_analyzer.py — Audit what's eating your LLM context window.
+
+Analyzes a conversation/session log or directory and surfaces
+the top waste patterns with actionable fixes.
+
+Usage:
+    python3 core/context_analyzer.py --path ./my-project
+    python3 core/context_analyzer.py --session ./session.json --model openai
+"""
+
+import os
+import re
+import json
+import argparse
+from pathlib import Path
+from dataclasses import dataclass, field
+
+
+@dataclass
+class WastePattern:
+    name: str
+    tokens_wasted: int
+    severity: str          # "high" | "medium" | "low"
+    description: str
+    fix: str
+    files: list = field(default_factory=list)
+
+
+def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
+    """Identify token waste patterns in a project directory."""
+    patterns = []
+    
+    # Import token counter
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from token_counter import estimate_tokens, scan_directory, SKIP_DIRS
+
+    all_files = scan_directory(path, model, respect_llmignore=False)
+    ignored_files = scan_directory(path, model, respect_llmignore=True)
+    ignored_paths = {f["path"] for f in ignored_files}
+    
+    # Pattern 1: Lock files
+    lock_files = [f for f in all_files if any(
+        x in f["path"] for x in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+                                   "bun.lockb", "Gemfile.lock", "poetry.lock", "Cargo.lock"]
+    )]
+    if lock_files:
+        total = sum(f["tokens"] for f in lock_files)
+        patterns.append(WastePattern(
+            name="Lock files",
+            tokens_wasted=total,
+            severity="high",
+            description=f"{len(lock_files)} lock file(s) consuming {total:,} tokens. These are auto-generated and never helpful to an LLM.",
+            fix="Add to .llmignore: package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb",
+            files=[f["path"] for f in lock_files]
+        ))
+
+    # Pattern 2: Generated/built files not ignored
+    generated = [f for f in all_files if f["path"] not in ignored_paths and any(
+        x in f["path"] for x in ["/dist/", "/build/", "/out/", ".min.js", ".min.css",
+                                   "/generated/", ".bundle.js", "__snapshots__"]
+    )]
+    if generated:
+        total = sum(f["tokens"] for f in generated)
+        patterns.append(WastePattern(
+            name="Generated/built files",
+            tokens_wasted=total,
+            severity="high",
+            description=f"{len(generated)} generated file(s) consuming {total:,} tokens. LLMs should never read compiled output.",
+            fix="Add to .llmignore: dist/, build/, out/, src/generated/, **/*.min.js",
+            files=[f["path"] for f in generated[:5]]
+        ))
+
+    # Pattern 3: Very large single files
+    huge = [f for f in all_files if f["tokens"] > 8000 and f["path"] not in ignored_paths]
+    if huge:
+        total = sum(f["tokens"] for f in huge)
+        patterns.append(WastePattern(
+            name="Oversized files",
+            tokens_wasted=total,
+            severity="medium",
+            description=f"{len(huge)} file(s) over 8k tokens each. Single large files consume disproportionate context.",
+            fix="Split large files, or tell the LLM explicitly which function/section to read.",
+            files=[f"{f['path']} ({f['tokens']:,} tokens)" for f in huge[:5]]
+        ))
+
+    # Pattern 4: Test snapshots
+    snapshots = [f for f in all_files if "__snapshots__" in f["path"] or f["path"].endswith(".snap")]
+    if snapshots:
+        total = sum(f["tokens"] for f in snapshots)
+        patterns.append(WastePattern(
+            name="Test snapshots",
+            tokens_wasted=total,
+            severity="medium",
+            description=f"{len(snapshots)} snapshot file(s) consuming {total:,} tokens. Snapshot content is rarely useful to LLMs.",
+            fix="Add to .llmignore: **/__snapshots__/, **/*.snap",
+            files=[f["path"] for f in snapshots[:3]]
+        ))
+
+    # Pattern 5: Log files
+    logs = [f for f in all_files if f["path"].endswith(".log") or "/logs/" in f["path"]]
+    if logs:
+        total = sum(f["tokens"] for f in logs)
+        patterns.append(WastePattern(
+            name="Log files",
+            tokens_wasted=total,
+            severity="medium",
+            description=f"{len(logs)} log file(s) consuming {total:,} tokens.",
+            fix="Add to .llmignore: *.log, logs/",
+            files=[f["path"] for f in logs[:3]]
+        ))
+
+    # Pattern 6: Check CLAUDE.md / system prompt size
+    for config_name in ["CLAUDE.md", "CLAUDE.md", ".cursorrules", "AGENTS.md"]:
+        config_path = path / config_name
+        if config_path.exists():
+            with open(config_path, encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            lines = content.count("\n") + 1
+            tokens = len(content) // 4
+            if lines > 200:
+                patterns.append(WastePattern(
+                    name=f"Bloated {config_name}",
+                    tokens_wasted=tokens,
+                    severity="high",
+                    description=f"{config_name} is {lines} lines ({tokens:,} tokens). This is loaded on EVERY session — every line costs forever.",
+                    fix=f"Trim {config_name} to under 200 lines. Move project-specific rules to subdirectory CLAUDE.md files.",
+                    files=[config_name]
+                ))
+            elif lines > 100:
+                patterns.append(WastePattern(
+                    name=f"{config_name} is getting heavy",
+                    tokens_wasted=0,
+                    severity="low",
+                    description=f"{config_name} is {lines} lines. Getting long — consider trimming before it hurts.",
+                    fix=f"Target: under 80 lines for lean sessions.",
+                    files=[config_name]
+                ))
+
+    return sorted(patterns, key=lambda p: {"high": 0, "medium": 1, "low": 2}[p.severity])
+
+
+def analyze_session(session_path: Path, model: str = "claude") -> dict:
+    """Analyze a conversation JSON file for token waste patterns."""
+    with open(session_path) as f:
+        session = json.load(f)
+
+    messages = session if isinstance(session, list) else session.get("messages", [])
+    
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent))
+    from token_counter import estimate_tokens
+
+    results = {
+        "total_turns": len(messages),
+        "total_tokens": 0,
+        "by_role": {},
+        "largest_messages": [],
+        "repeated_content": [],
+        "recommendations": [],
+    }
+
+    token_counts = []
+    for i, msg in enumerate(messages):
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+        tokens = estimate_tokens(str(content), model)
+        role = msg.get("role", "unknown")
+        results["by_role"][role] = results["by_role"].get(role, 0) + tokens
+        results["total_tokens"] += tokens
+        token_counts.append({"index": i, "role": role, "tokens": tokens, "preview": str(content)[:80]})
+
+    # Find largest messages
+    results["largest_messages"] = sorted(token_counts, key=lambda x: x["tokens"], reverse=True)[:5]
+
+    # Detect repeated content (simple heuristic)
+    user_msgs = [m["preview"] for m in token_counts if m["role"] == "user"]
+    if len(user_msgs) > len(set(user_msgs)):
+        results["repeated_content"].append("Duplicate messages detected — possible retry loop")
+
+    # Recommendations
+    avg_tokens = results["total_tokens"] / max(len(messages), 1)
+    if avg_tokens > 2000:
+        results["recommendations"].append("Average message is very large — batch smaller tasks")
+    if results["total_turns"] > 20:
+        results["recommendations"].append("Long session — use /compact or start fresh for new tasks")
+    if results["by_role"].get("assistant", 0) > results["by_role"].get("user", 0) * 3:
+        results["recommendations"].append("Assistant responses are much larger than prompts — ask for shorter answers")
+
+    return results
+
+
+def print_analysis(patterns: list[WastePattern], path: str):
+    RED = "\033[91m"; YELLOW = "\033[93m"; GREEN = "\033[92m"
+    CYAN = "\033[96m"; BOLD = "\033[1m"; NC = "\033[0m"
+
+    sev_color = {"high": RED, "medium": YELLOW, "low": GREEN}
+    sev_icon  = {"high": "✗", "medium": "⚠", "low": "→"}
+
+    total_wasted = sum(p.tokens_wasted for p in patterns)
+
+    print(f"\n{BOLD}{'─'*60}{NC}")
+    print(f"{BOLD}  Context Analyzer — Waste Report{NC}")
+    print(f"  Path: {path}")
+    print(f"{'─'*60}")
+    
+    if not patterns:
+        print(f"  {GREEN}✓ No significant waste patterns found. Good hygiene!{NC}")
+    else:
+        print(f"  Found {len(patterns)} waste pattern(s) — ~{total_wasted:,} tokens recoverable\n")
+        for p in patterns:
+            c = sev_color[p.severity]
+            icon = sev_icon[p.severity]
+            print(f"  {c}{BOLD}[{p.severity.upper()}] {p.name}{NC}")
+            print(f"  {p.description}")
+            if p.files:
+                for f in p.files[:3]:
+                    print(f"    {CYAN}·{NC} {f}")
+            print(f"  {GREEN}Fix:{NC} {p.fix}")
+            print()
+
+    print(f"{'─'*60}\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Analyze LLM context waste patterns")
+    parser.add_argument("--path",    "-p", default=".", help="Directory to analyze")
+    parser.add_argument("--session", "-s", help="Session JSON file to analyze")
+    parser.add_argument("--model",   "-m", default="claude",
+                        choices=["claude", "openai", "gemini", "ollama", "generic"])
+    parser.add_argument("--json",    action="store_true", help="Output raw JSON")
+    args = parser.parse_args()
+
+    if args.session:
+        results = analyze_session(Path(args.session), args.model)
+        if args.json:
+            print(json.dumps(results, indent=2))
+        else:
+            print(json.dumps(results, indent=2))
+        return
+
+    path = Path(args.path).resolve()
+    patterns = analyze_directory(path, args.model)
+
+    if args.json:
+        print(json.dumps([{
+            "name": p.name, "tokens_wasted": p.tokens_wasted,
+            "severity": p.severity, "fix": p.fix, "files": p.files
+        } for p in patterns], indent=2))
+        return
+
+    print_analysis(patterns, str(path))
+
+
+if __name__ == "__main__":
+    main()

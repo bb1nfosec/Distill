@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install core deps
+        run: pip install tiktoken pytest
+
+      - name: Token counter self-test
+        run: python3 core/token_counter.py --path . --model generic
+
+      - name: Context analyzer self-test
+        run: python3 core/context_analyzer.py --path . --model generic
+
+      - name: Config generator dry-run
+        run: python3 scripts/generate_config.py --output . --model all --dry-run
+
+      - name: Run tests
+        run: pytest tests/ -v
