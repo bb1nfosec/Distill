@@ -44,12 +44,13 @@ A typical 20-turn Claude Code session burns **40,000–100,000 tokens**. Distill
 
 | Tool | What it does |
 |---|---|
-| `core/token_counter.py` | Scan any repo — see exactly which files burn the most tokens |
-| `core/context_analyzer.py` | Detect waste patterns: lock files, generated code, bloated configs |
-| `setup.sh` | One command — auto-generates all ignore files and configs |
-| `scripts/generate_config.py` | Python config generator with project-type auto-detection |
+| `distill scan` | Scan any repo — tokens **and dollar cost** per file |
+| `distill analyze` | Detect waste: lock files, generated code, bloated configs |
+| `distill check` | CI budget gate — exits 1 if over context threshold |
+| `distill generate` | Auto-generate `.llmignore`, `CLAUDE.md`, and LLM configs |
 | `ClaudeAdapter` | Prompt caching + subagents + auto-compact for Anthropic's API |
 | `OpenAIAdapter` | History trimming + lean system prompts for GPT-4o and friends |
+| `GeminiAdapter` | 1M context window, token counting via native API |
 | `OllamaAdapter` | Context window management for local models |
 | `BaseLLMAdapter` | Extend for any LLM in ~30 lines |
 
@@ -60,50 +61,52 @@ A typical 20-turn Claude Code session burns **40,000–100,000 tokens**. Distill
 ```bash
 git clone https://github.com/bb1nfosec/distill
 cd distill
-pip install -r requirements.txt
+pip install -e ".[tiktoken]"     # zero hard deps — tiktoken is optional but recommended
 ```
 
-**Audit your current project's token cost in 30 seconds:**
+**Audit your project's token cost and dollar spend in 30 seconds:**
 
 ```bash
-python3 core/token_counter.py --path ./my-project
+distill scan --path ./my-project
 ```
 
 ```
-────────────────────────────────────────────────────────────
-  Distill — Context Audit
-────────────────────────────────────────────────────────────
-  Model         : claude
+──────────────────────────────────────────────────────────────
+  distill — Context Audit
+──────────────────────────────────────────────────────────────
+  Model         : claude  ($3.00 / 1M input tokens)
   Context limit : 200k tokens
   Files scanned : 247
   Total tokens  : 38.4k  (19.2% of context)
+  Per-session $ : $0.1152  (input cost, context loaded once)
+  Sessions / $1 : 8
 
-  Top token consumers:
-  File                                        Tokens   Lines
-  ──────────────────────────────────────────  ──────  ──────
-  package-lock.json                            18.2k   4821   ← ignore this
-  src/generated/schema.ts                       4.1k    892   ← ignore this
-  src/api/routes.ts                             2.3k    412
-  src/auth/middleware.ts                        1.8k    310
+  File                                        Tokens   Lines     Cost
+  ──────────────────────────────────────────  ──────  ──────  ──────
+  package-lock.json                            18.2k   4821   $0.0547  ← ignore
+  src/generated/schema.ts                       4.1k    892   $0.0123  ← ignore
+  src/api/routes.ts                             2.3k    412   $0.0069
+  src/auth/middleware.ts                        1.8k    310   $0.0054
 
   Recommendations:
-  → Lock files using 18.2k tokens — add to .llmignore immediately
-  → Generated files using 4.1k tokens — ignore them
-────────────────────────────────────────────────────────────
+  → Lock files: 18.2k tokens ($0.0547) — add to .llmignore
+  → Generated files: 4.1k tokens — ignore them
+──────────────────────────────────────────────────────────────
+```
+
+**Find waste and set a CI budget gate:**
+
+```bash
+distill analyze --path ./my-project
+distill check   --path . --max-pct 30           # exits 1 if over 30% of context
+distill check   --path . --max-pct 30 --fail-on-waste   # also fail on lock files etc.
 ```
 
 **Generate all ignore files and configs:**
 
 ```bash
-bash setup.sh                              # auto-detect project type
-bash setup.sh --model all                  # generate configs for every LLM
-python3 scripts/generate_config.py --output . --model all --dry-run
-```
-
-**Find waste patterns:**
-
-```bash
-python3 core/context_analyzer.py --path ./my-project
+distill generate --output . --model all         # .llmignore, CLAUDE.md, Modelfile, …
+distill generate --output . --model all --dry-run
 ```
 
 ---
@@ -141,7 +144,7 @@ Turn 20:   500          +  76,000            + 200       =  76,700
 | **Claude Code** | `CLAUDE.md` + `.claudeignore` | — | Subagents, `/compact`, `/btw`, lean config |
 | **OpenAI GPT-4o** | `openai_system.md` | `OpenAIAdapter` | Lean system prompt, automatic history trimming |
 | **OpenAI GPT-4o-mini** | `openai_system.md` | `OpenAIAdapter` | 15× cheaper — use for tasks that don't need full GPT-4o |
-| **Google Gemini** | `gemini_system.md` | *(extend BaseAdapter)* | Context caching for large documents |
+| **Google Gemini** | `gemini_system.md` | `GeminiAdapter` | 1M ctx window, native token counting, context caching |
 | **Ollama (local)** | `Modelfile` | `OllamaAdapter` | `num_ctx` tuning, task-based model selection |
 | **LiteLLM / Groq** | OpenAI-compat | `OpenAIAdapter(base_url=...)` | Works with any OpenAI-compatible proxy |
 
@@ -152,13 +155,12 @@ Turn 20:   500          +  76,000            + 200       =  76,700
 ### Drop-in interface across all providers
 
 ```python
-from adapters.claude_adapter import ClaudeAdapter
-from adapters.openai_adapter import OpenAIAdapter
-from adapters.ollama_adapter import OllamaAdapter
+from adapters import ClaudeAdapter, OpenAIAdapter, GeminiAdapter, OllamaAdapter
 
 # Same interface — swap your LLM without changing any other code
 llm = ClaudeAdapter(model="claude-sonnet-4-5", enable_caching=True)
 # llm = OpenAIAdapter(model="gpt-4o")
+# llm = GeminiAdapter(model="gemini-2.0-flash")   # $0.10/1M, 1M ctx window
 # llm = OllamaAdapter(model="llama3.2", num_ctx=8192)
 
 response = llm.chat("Refactor the auth module to use JWT")
@@ -245,40 +247,60 @@ llm = MyLLMAdapter(model="my-model-v1", auto_compact_threshold=0.70)
 
 ## 🖥️ CLI Reference
 
-### `core/token_counter.py`
+Install once and use `distill` everywhere:
 
 ```bash
-python3 core/token_counter.py --path ./my-project           # scan directory
-python3 core/token_counter.py --path . --model openai        # OpenAI tokenizer
-python3 core/token_counter.py --path . --top 30              # show top 30 files
-python3 core/token_counter.py --file src/api/routes.ts       # single file
-python3 core/token_counter.py --path . --json | jq '.[:5]'  # JSON output
-python3 core/token_counter.py --path . --no-ignore           # ignore .llmignore
+pip install -e ".[tiktoken]"   # from repo root
 ```
 
-### `core/context_analyzer.py`
+### `distill scan`
 
 ```bash
-python3 core/context_analyzer.py --path ./my-project        # find waste patterns
-python3 core/context_analyzer.py --session ./session.json   # analyze a chat log
-python3 core/context_analyzer.py --path . --json            # JSON output
+distill scan --path ./my-project              # tokens + cost per file
+distill scan --path . --model gpt-4o          # OpenAI pricing
+distill scan --path . --top 30                # top 30 files
+distill scan --file src/api/routes.ts         # single file
+distill scan --path . --json | jq '.[:5]'     # pipe to jq
+distill scan --path . --no-ignore             # skip .llmignore
 ```
 
-### `scripts/generate_config.py`
+### `distill analyze`
 
 ```bash
-python3 scripts/generate_config.py --output . --model claude
+distill analyze --path ./my-project           # find waste patterns
+distill analyze --path . --json               # JSON output for scripting
+```
+
+### `distill check`  ← use in CI
+
+```bash
+distill check --path . --max-pct 30           # fail if > 30% of context
+distill check --path . --max-pct 50 --model gpt-4o
+distill check --path . --max-pct 30 --fail-on-waste   # also fail on lock files
+distill check --path . --json                 # machine-readable exit + report
+```
+
+**GitHub Actions:**
+```yaml
+- name: Token budget check
+  run: distill check --path . --max-pct 30
+```
+
+### `distill generate`
+
+```bash
+distill generate --output . --model all          # .llmignore, CLAUDE.md, Modelfile
+distill generate --output . --model claude        # Claude only
+distill generate --output . --model all --dry-run # preview without writing
+```
+
+### Direct scripts (no install required)
+
+```bash
+python3 core/token_counter.py --path .
+python3 core/context_analyzer.py --path .
+python3 core/check.py --path . --max-pct 30
 python3 scripts/generate_config.py --output . --model all
-python3 scripts/generate_config.py --output . --model all --dry-run
-python3 scripts/generate_config.py --output . --notes "Use Zod. API in src/api/."
-```
-
-### `setup.sh`
-
-```bash
-bash setup.sh                          # auto-detect everything
-bash setup.sh --model all              # all LLMs
-bash setup.sh --model claude ./other   # target a different directory
 ```
 
 ---

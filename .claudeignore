@@ -1,0 +1,61 @@
+# .llmignore — skip these paths in all LLM tool calls
+# Works as .claudeignore for Claude Code
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+build/
+out/
+target/
+
+# Framework caches
+.next/
+.nuxt/
+.svelte-kit/
+.turbo/
+.vercel/
+
+# Lock files (huge, useless)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+poetry.lock
+Cargo.lock
+
+# Generated
+src/generated/
+*.min.js
+*.min.css
+
+# Test artifacts
+coverage/
+.nyc_output/
+htmlcov/
+__snapshots__/
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.mp4
+*.woff
+*.woff2
+*.ttf
+
+# Logs & secrets
+*.log
+.env
+.env.*
+*.pem
+*.key

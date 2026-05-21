@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-token_counter.py — Estimate token costs for any LLM before you run.
+token_counter.py — Estimate token costs and dollar spend for any LLM.
 
 Usage:
     python3 core/token_counter.py --path ./my-project
-    python3 core/token_counter.py --path ./my-project --model openai
+    python3 core/token_counter.py --path . --model openai --cost
     python3 core/token_counter.py --file ./src/api/handler.ts
     python3 core/token_counter.py --path . --top 20
 """
@@ -14,32 +14,47 @@ import sys
 import argparse
 from pathlib import Path
 
-# Token approximation ratios per model family
-# (chars per token — higher = fewer tokens per char = cheaper)
 MODEL_RATIOS = {
-    "claude":  4.2,   # Claude tokenizer (cl100k-based)
-    "openai":  4.0,   # GPT-4 / GPT-4o
-    "gemini":  4.1,   # Gemini 1.5
-    "ollama":  3.8,   # Llama/Mistral — slightly more tokens
+    "claude":  4.2,
+    "openai":  4.0,
+    "gemini":  4.1,
+    "ollama":  3.8,
     "generic": 4.0,
 }
 
-# Context window limits per model
 CONTEXT_LIMITS = {
-    "claude":        200_000,
-    "claude-sonnet": 200_000,
-    "claude-haiku":  200_000,
-    "gpt-4o":        128_000,
-    "gpt-4-turbo":   128_000,
-    "gpt-3.5":        16_000,
-    "gemini-1.5-pro": 1_000_000,
-    "gemini-2.0":     1_000_000,
-    "llama3":          128_000,
-    "mistral":          32_000,
-    "generic":         128_000,
+    "claude":             200_000,
+    "claude-sonnet":      200_000,
+    "claude-haiku":       200_000,
+    "claude-opus":        200_000,
+    "gpt-4o":             128_000,
+    "gpt-4o-mini":        128_000,
+    "gpt-4-turbo":        128_000,
+    "gpt-3.5":             16_000,
+    "gemini-1.5-pro":   1_000_000,
+    "gemini-2.0-flash": 1_048_576,
+    "llama3":             128_000,
+    "mistral":             32_000,
+    "generic":            128_000,
+    "ollama":             128_000,
 }
 
-# Files to always skip
+# USD per 1M input tokens (input rate — what a scan estimate represents)
+PRICING = {
+    "claude":          3.00,   # claude-sonnet-4-5/4-6
+    "claude-sonnet":   3.00,
+    "claude-haiku":    0.80,
+    "claude-opus":    15.00,
+    "openai":          2.50,   # gpt-4o
+    "gpt-4o":          2.50,
+    "gpt-4o-mini":     0.15,
+    "gemini":          1.25,   # gemini-1.5-pro
+    "gemini-1.5-pro":  1.25,
+    "gemini-2.0-flash":0.10,
+    "ollama":          0.00,   # local — free
+    "generic":         2.50,
+}
+
 SKIP_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp",
     ".mp4", ".mp3", ".wav", ".ogg",
@@ -48,7 +63,7 @@ SKIP_EXTENSIONS = {
     ".pyc", ".pyo", ".pyd",
     ".so", ".dll", ".dylib", ".exe",
     ".db", ".sqlite", ".sqlite3",
-    ".lock",  # lock files are huge and useless
+    ".lock",
 }
 
 SKIP_DIRS = {
@@ -62,7 +77,6 @@ SKIP_DIRS = {
 
 def estimate_tokens(text: str, model: str = "generic") -> int:
     ratio = MODEL_RATIOS.get(model, 4.0)
-    # Try tiktoken for accuracy if available
     try:
         import tiktoken
         enc = tiktoken.get_encoding("cl100k_base")
@@ -71,10 +85,23 @@ def estimate_tokens(text: str, model: str = "generic") -> int:
         return max(1, int(len(text) / ratio))
 
 
+def estimate_cost(tokens: int, model: str) -> float:
+    """Return estimated USD cost for `tokens` input tokens."""
+    rate = PRICING.get(model, PRICING["generic"])
+    return tokens / 1_000_000 * rate
+
+
+def format_cost(usd: float) -> str:
+    if usd == 0:
+        return "$0.000 (local)"
+    if usd < 0.001:
+        return f"${usd:.4f}"
+    return f"${usd:.4f}"
+
+
 def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> list[dict]:
-    """Walk directory and return token estimates per file."""
     ignore_patterns = set()
-    
+
     if respect_llmignore:
         for ignore_file in [".llmignore", ".claudeignore", ".gitignore"]:
             ig_path = path / ignore_file
@@ -88,8 +115,7 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
     results = []
     for root, dirs, files in os.walk(path):
         root_path = Path(root)
-        
-        # Skip ignored dirs
+
         dirs[:] = [
             d for d in dirs
             if d not in SKIP_DIRS
@@ -101,11 +127,9 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
             fpath = root_path / fname
             rel_path = fpath.relative_to(path)
 
-            # Skip binary/generated extensions
             if fpath.suffix.lower() in SKIP_EXTENSIONS:
                 continue
 
-            # Skip ignored patterns (simple glob match)
             skip = False
             for pattern in ignore_patterns:
                 if pattern in str(rel_path) or fname == pattern:
@@ -116,7 +140,7 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
 
             try:
                 size = fpath.stat().st_size
-                if size == 0 or size > 500_000:  # skip empty or >500KB
+                if size == 0 or size > 500_000:
                     continue
                 with open(fpath, encoding="utf-8", errors="ignore") as f:
                     content = f.read()
@@ -127,6 +151,7 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
                     "tokens": tokens,
                     "lines": lines,
                     "size_kb": round(size / 1024, 1),
+                    "cost_usd": estimate_cost(tokens, model),
                 })
             except (PermissionError, OSError):
                 continue
@@ -142,86 +167,105 @@ def format_number(n: int) -> str:
     return str(n)
 
 
-def print_report(results: list[dict], model: str, top_n: int = 20, context_limit: int = None):
+def print_report(results: list[dict], model: str, top_n: int = 20,
+                 context_limit: int = None, show_cost: bool = True):
     total_tokens = sum(r["tokens"] for r in results)
-    total_files = len(results)
-    limit = context_limit or CONTEXT_LIMITS.get(model, 128_000)
-    pct_of_context = (total_tokens / limit) * 100
+    total_cost   = sum(r["cost_usd"] for r in results)
+    total_files  = len(results)
+    limit        = context_limit or CONTEXT_LIMITS.get(model, 128_000)
+    pct          = (total_tokens / limit) * 100
 
-    # ANSI colors
     RED = "\033[91m"; YELLOW = "\033[93m"; GREEN = "\033[92m"
     CYAN = "\033[96m"; BOLD = "\033[1m"; NC = "\033[0m"
 
-    color = GREEN if pct_of_context < 30 else (YELLOW if pct_of_context < 70 else RED)
+    color = GREEN if pct < 30 else (YELLOW if pct < 70 else RED)
+    rate  = PRICING.get(model, PRICING["generic"])
 
-    print(f"\n{BOLD}{'─'*60}{NC}")
-    print(f"{BOLD}  LLM Token Optimizer — Context Audit{NC}")
-    print(f"{'─'*60}")
-    print(f"  Model         : {model}")
+    print(f"\n{BOLD}{'─'*62}{NC}")
+    print(f"{BOLD}  distill — Context Audit{NC}")
+    print(f"{'─'*62}")
+    print(f"  Model         : {model}  (${rate:.2f} / 1M input tokens)")
     print(f"  Context limit : {format_number(limit)} tokens")
     print(f"  Files scanned : {total_files:,}")
-    print(f"  Total tokens  : {BOLD}{color}{format_number(total_tokens)}{NC}")
-    print(f"  % of context  : {color}{pct_of_context:.1f}%{NC}")
-    print(f"{'─'*60}\n")
+    print(f"  Total tokens  : {BOLD}{color}{format_number(total_tokens)}{NC}  ({pct:.1f}% of context)")
+    if show_cost:
+        print(f"  Per-session $  : {BOLD}{format_cost(total_cost)}{NC}  (input cost, context loaded once)")
+        sessions_per_dollar = (1 / total_cost) if total_cost > 0 else float("inf")
+        if sessions_per_dollar < float("inf"):
+            print(f"  Sessions / $1  : {sessions_per_dollar:.0f}")
+    print(f"{'─'*62}\n")
 
-    if pct_of_context > 100:
-        print(f"  {RED}✗ OVER CONTEXT LIMIT — Claude cannot read all files in one session{NC}")
-        print(f"    → Add more paths to .llmignore")
-        print(f"    → Use subagents for different parts of the codebase\n")
-    elif pct_of_context > 70:
-        print(f"  {YELLOW}⚠  Heavy context — risk of degraded quality near limit{NC}")
-        print(f"    → Review the top files below and add large ones to .llmignore\n")
+    if pct > 100:
+        print(f"  {RED}✗ OVER CONTEXT LIMIT{NC} — LLM cannot read all files in one pass")
+        print(f"    → Add paths to .llmignore")
+        print(f"    → Use subagents for different subsystems\n")
+    elif pct > 70:
+        print(f"  {YELLOW}⚠  Heavy context{NC} — quality may degrade near limit")
+        print(f"    → Review top files below and ignore the largest unnecessary ones\n")
     else:
-        print(f"  {GREEN}✓ Context looks healthy{NC}\n")
+        print(f"  {GREEN}✓ Context healthy{NC}\n")
 
-    print(f"  {BOLD}Top {min(top_n, len(results))} token consumers:{NC}")
-    print(f"  {'File':<50} {'Tokens':>8}  {'Lines':>6}  {'Size':>7}")
-    print(f"  {'─'*50} {'─'*8}  {'─'*6}  {'─'*7}")
+    col = f"  {'File':<48} {'Tokens':>8}  {'Lines':>6}  {'Size':>7}"
+    if show_cost:
+        col += f"  {'Cost':>8}"
+    print(f"{BOLD}{col}{NC}")
 
-    cumulative = 0
+    sep = f"  {'─'*48} {'─'*8}  {'─'*6}  {'─'*7}"
+    if show_cost:
+        sep += f"  {'─'*8}"
+    print(sep)
+
     for r in results[:top_n]:
-        cumulative += r["tokens"]
-        pct = r["tokens"] / total_tokens * 100 if total_tokens else 0
-        bar = "█" * int(pct / 2)
-        path_str = r["path"][:49]
-        print(f"  {path_str:<50} {format_number(r['tokens']):>8}  {r['lines']:>6}  {r['size_kb']:>6}KB")
+        path_str = r["path"][:47]
+        line = f"  {path_str:<48} {format_number(r['tokens']):>8}  {r['lines']:>6}  {r['size_kb']:>6}KB"
+        if show_cost:
+            line += f"  {format_cost(r['cost_usd']):>8}"
+        print(line)
 
     if len(results) > top_n:
-        remaining = sum(r["tokens"] for r in results[top_n:])
-        print(f"  {'... and ' + str(len(results)-top_n) + ' more files':<50} {format_number(remaining):>8}")
+        remaining_tok  = sum(r["tokens"]   for r in results[top_n:])
+        remaining_cost = sum(r["cost_usd"] for r in results[top_n:])
+        line = f"  {'... and ' + str(len(results)-top_n) + ' more files':<48} {format_number(remaining_tok):>8}"
+        if show_cost:
+            line += f"  {'':>8}  {'':>6}  {'':>7}  {format_cost(remaining_cost):>8}"
+        print(line)
 
     print(f"\n  {BOLD}Recommendations:{NC}")
 
-    # Smart recommendations
     large_files = [r for r in results if r["tokens"] > 5000]
     if large_files:
-        print(f"  {YELLOW}→{NC} {len(large_files)} files over 5k tokens — consider splitting or ignoring:")
+        print(f"  {YELLOW}→{NC} {len(large_files)} files over 5k tokens — split or ignore:")
         for f in large_files[:3]:
-            print(f"      {f['path']} ({format_number(f['tokens'])} tokens)")
+            print(f"      {f['path']} ({format_number(f['tokens'])} tokens, {format_cost(f['cost_usd'])})")
 
     lock_files = [r for r in results if any(x in r["path"] for x in ["lock", "Lock"])]
     if lock_files:
-        total_lock = sum(r["tokens"] for r in lock_files)
-        print(f"  {RED}→{NC} Lock files using {format_number(total_lock)} tokens — add to .llmignore!")
+        tot = sum(r["tokens"] for r in lock_files)
+        cost = sum(r["cost_usd"] for r in lock_files)
+        print(f"  {RED}→{NC} Lock files: {format_number(tot)} tokens ({format_cost(cost)}) — add to .llmignore")
 
     generated = [r for r in results if any(x in r["path"] for x in ["generated", "dist/", "build/", ".min."])]
     if generated:
-        total_gen = sum(r["tokens"] for r in generated)
-        print(f"  {YELLOW}→{NC} Generated/built files using {format_number(total_gen)} tokens — ignore them")
+        tot = sum(r["tokens"] for r in generated)
+        print(f"  {YELLOW}→{NC} Generated/built files: {format_number(tot)} tokens — ignore them")
 
-    print(f"\n{'─'*60}\n")
+    print(f"\n{'─'*62}\n")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Estimate LLM token costs for a codebase")
-    parser.add_argument("--path",  "-p", default=".", help="Directory to scan (default: .)")
-    parser.add_argument("--file",  "-f", help="Scan a single file")
-    parser.add_argument("--model", "-m", default="claude",
-                        choices=list(MODEL_RATIOS.keys()), help="LLM model family")
-    parser.add_argument("--top",   "-t", type=int, default=20, help="Show top N files")
-    parser.add_argument("--no-ignore", action="store_true", help="Ignore .llmignore files")
-    parser.add_argument("--json",  action="store_true", help="Output raw JSON")
+    parser = argparse.ArgumentParser(description="Estimate token costs and $ spend for any codebase")
+    parser.add_argument("--path",     "-p", default=".",      help="Directory to scan (default: .)")
+    parser.add_argument("--file",     "-f",                   help="Scan a single file")
+    parser.add_argument("--model",    "-m", default="claude",
+                        choices=list(MODEL_RATIOS.keys()),     help="LLM model family")
+    parser.add_argument("--top",      "-t", type=int, default=20, help="Show top N files")
+    parser.add_argument("--cost",     "-c", action="store_true",  help="Show per-file cost column (always shown in header)")
+    parser.add_argument("--no-cost",        action="store_true",  help="Hide cost column")
+    parser.add_argument("--no-ignore",      action="store_true",  help="Ignore .llmignore files")
+    parser.add_argument("--json",           action="store_true",  help="Output raw JSON")
     args = parser.parse_args()
+
+    show_cost = not args.no_cost
 
     if args.file:
         path = Path(args.file)
@@ -231,7 +275,8 @@ def main():
         with open(path, encoding="utf-8", errors="ignore") as f:
             content = f.read()
         tokens = estimate_tokens(content, args.model)
-        print(f"{path}: {format_number(tokens)} tokens ({path.stat().st_size // 1024}KB)")
+        cost   = estimate_cost(tokens, args.model)
+        print(f"{path}: {format_number(tokens)} tokens  {format_cost(cost)}  ({path.stat().st_size // 1024}KB)")
         return
 
     path = Path(args.path).resolve()
@@ -247,7 +292,7 @@ def main():
         print(json.dumps(results, indent=2))
         return
 
-    print_report(results, args.model, top_n=args.top)
+    print_report(results, args.model, top_n=args.top, show_cost=show_cost)
 
 
 if __name__ == "__main__":

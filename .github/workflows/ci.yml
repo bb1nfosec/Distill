@@ -24,14 +24,23 @@ jobs:
       - name: Install core deps
         run: pip install tiktoken pytest
 
-      - name: Token counter self-test
+      - name: Token budget check (≤ 40% of context)
+        run: python3 core/check.py --path . --model claude --max-pct 40
+
+      - name: Scan self-test
         run: python3 core/token_counter.py --path . --model generic
 
-      - name: Context analyzer self-test
+      - name: Analyzer self-test
         run: python3 core/context_analyzer.py --path . --model generic
 
       - name: Config generator dry-run
         run: python3 scripts/generate_config.py --output . --model all --dry-run
+
+      - name: CLI dispatcher test
+        run: |
+          python3 core/cli.py scan --path . --model generic
+          python3 core/cli.py check --path . --max-pct 60
+          python3 core/cli.py version
 
       - name: Run tests
         run: pytest tests/ -v
