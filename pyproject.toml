@@ -10,7 +10,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "bbinfosec", email = "vickytestssec@gmail.com" }]
-keywords = ["llm", "tokens", "optimization", "claude", "openai", "ollama", "ai", "cost"]
+keywords = ["llm", "tokens", "optimization", "claude", "openai", "ollama", "gemini", "ai", "cost"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
-# Core tools work with zero dependencies — all extras are optional
+# Core tools (scan, analyze, check) work with zero hard dependencies
 dependencies = []
 
 [project.optional-dependencies]
@@ -35,14 +35,20 @@ all      = ["tiktoken>=0.7.0", "anthropic>=0.40.0", "openai>=1.50.0", "google-ge
 dev      = ["pytest>=8.0.0", "tiktoken>=0.7.0"]
 
 [project.urls]
-Homepage   = "https://github.com/bb1nfosec/distill"
-Repository = "https://github.com/bb1nfosec/distill"
-Issues     = "https://github.com/bb1nfosec/distill/issues"
-Changelog  = "https://github.com/bb1nfosec/distill/blob/main/CHANGELOG.md"
+Homepage   = "https://github.com/bb1nfosec/Distill"
+Repository = "https://github.com/bb1nfosec/Distill"
+Issues     = "https://github.com/bb1nfosec/Distill/issues"
+Changelog  = "https://github.com/bb1nfosec/Distill/blob/main/CHANGELOG.md"
 
 [project.scripts]
-distill-count   = "core.token_counter:main"
+distill         = "core.cli:main"
+distill-scan    = "core.token_counter:main"
 distill-analyze = "core.context_analyzer:main"
+distill-check   = "core.check:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "adapters*", "scripts*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
