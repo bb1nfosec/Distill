@@ -43,12 +43,14 @@ def cmd_scan(argv):
 
 
 def cmd_analyze(argv):
-    from core.context_analyzer import analyze_directory, print_analysis
+    from core.context_analyzer import analyze_directory, print_analysis, apply_fixes
     import json
     p = argparse.ArgumentParser(prog="distill analyze")
     p.add_argument("--path",  "-p", default=".")
     p.add_argument("--model", "-m", default="claude")
     p.add_argument("--json",        action="store_true")
+    p.add_argument("--fix",         action="store_true",
+                   help="Auto-apply fixes (writes .llmignore / .claudeignore)")
     args = p.parse_args(argv)
 
     path = Path(args.path).resolve()
@@ -58,10 +60,19 @@ def cmd_analyze(argv):
         print(json.dumps([{
             "name": p.name, "severity": p.severity,
             "tokens_wasted": p.tokens_wasted, "fix": p.fix,
+            "auto_fixable": bool(p.llmignore_entries),
         } for p in patterns], indent=2))
         return 0
 
     print_analysis(patterns, str(path))
+
+    if args.fix:
+        added = apply_fixes(patterns, path)
+        if added:
+            print(f"\033[92m✓ Applied fixes — {added} entries added to .llmignore / .claudeignore\033[0m\n")
+        else:
+            print("  Nothing new to add (all entries already present).\n")
+
     return 0
 
 
@@ -119,6 +130,7 @@ Examples:
   distill scan --path ./my-project
   distill scan --path . --model gpt-4o --cost
   distill analyze --path ./my-project
+  distill analyze --path ./my-project --fix
   distill check --path . --max-pct 30
   distill check --path . --max-pct 30 --fail-on-waste
   distill generate --output . --model all
