@@ -134,6 +134,32 @@ def generate_llmignore(path: str = ".") -> str:
     return f"# Detected project type: {project_type}\n# Copy to {path}/.llmignore\n\n{content}"
 
 
+@mcp.tool()
+def fix_context(
+    path: str = ".",
+    model: str = "claude",
+    dry_run: bool = False,
+    min_severity: str = "high",
+) -> str:
+    """Automatically fix context waste by writing .llmignore rules.
+
+    Detects waste patterns (lock files, build artifacts, snapshots, logs),
+    appends the correct ignore rules to .llmignore, and returns a before/after
+    comparison showing tokens and dollars saved.
+
+    Args:
+        path: Project root to fix (default: current directory).
+        model: LLM model for token counting and cost estimates.
+        dry_run: If True, show what would change without writing any files.
+        min_severity: Minimum severity level to auto-fix — 'high' (default), 'medium', or 'low'.
+    """
+    from core.fix import run_fix
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        run_fix(Path(path), model=model, dry_run=dry_run, min_severity=min_severity)
+    return buf.getvalue()
+
+
 def main():
     mcp.run()
 
