@@ -1,16 +1,16 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "distill-llm"
 version = "0.1.0"
-description = "Universal token optimization toolkit for Claude, OpenAI, Gemini, and Ollama"
+description = "Scan any codebase, see which files are burning your Claude/GPT tokens, and the exact dollar cost — with a CI budget gate and drop-in adapters for every major LLM."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "bbinfosec", email = "vickytestssec@gmail.com" }]
-keywords = ["llm", "tokens", "optimization", "claude", "openai", "ollama", "gemini", "ai", "cost"]
+keywords = ["llm", "tokens", "token-optimization", "claude", "openai", "gemini", "ollama", "ai", "cost", "developer-tools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -21,6 +21,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
 ]
 
 # Core tools (scan, analyze, check) work with zero hard dependencies
@@ -39,6 +41,7 @@ Homepage   = "https://github.com/bb1nfosec/Distill"
 Repository = "https://github.com/bb1nfosec/Distill"
 Issues     = "https://github.com/bb1nfosec/Distill/issues"
 Changelog  = "https://github.com/bb1nfosec/Distill/blob/main/CHANGELOG.md"
+"Try Online" = "https://bb1nfosec.github.io/Distill"
 
 [project.scripts]
 distill         = "core.cli:main"
@@ -49,6 +52,9 @@ distill-check   = "core.check:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["core*", "adapters*", "scripts*"]
+
+[tool.setuptools.package-data]
+"*" = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
