@@ -12,6 +12,7 @@ Usage:
 
 import os
 import re
+import sys
 import json
 import argparse
 from pathlib import Path
@@ -149,7 +150,7 @@ def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
 
 def analyze_session(session_path: Path, model: str = "claude") -> dict:
     """Analyze a conversation JSON file for token waste patterns."""
-    with open(session_path) as f:
+    with open(session_path, encoding='utf-8') as f:
         session = json.load(f)
 
     messages = session if isinstance(session, list) else session.get("messages", [])
@@ -214,7 +215,7 @@ def apply_fixes(patterns: list[WastePattern], project_path: Path) -> int:
         existing = set()
         header = ""
         if ignore_path.exists():
-            content = ignore_path.read_text()
+            content = ignore_path.read_text(encoding='utf-8')
             existing = {line.strip() for line in content.splitlines() if line.strip() and not line.startswith("#")}
             header = content.rstrip("\n") + "\n"
         else:
@@ -225,7 +226,7 @@ def apply_fixes(patterns: list[WastePattern], project_path: Path) -> int:
             continue
 
         block = "\n# Added by distill analyze --fix\n" + "\n".join(new_entries) + "\n"
-        ignore_path.write_text(header + block)
+        ignore_path.write_text(header + block, encoding='utf-8')
         total_added = len(new_entries)
 
     return total_added
@@ -271,6 +272,14 @@ def print_analysis(patterns: list[WastePattern], path: str):
 
 
 def main():
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        elif hasattr(sys.stdout, 'buffer'):
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description="Analyze LLM context waste patterns")
     parser.add_argument("--path",    "-p", default=".", help="Directory to analyze")
     parser.add_argument("--session", "-s", help="Session JSON file to analyze")
