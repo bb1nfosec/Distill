@@ -107,7 +107,7 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
         for ignore_file in [".llmignore", ".claudeignore", ".gitignore"]:
             ig_path = path / ignore_file
             if ig_path.exists():
-                with open(ig_path) as f:
+                with open(ig_path, encoding='utf-8', errors='replace') as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith("#"):
@@ -261,6 +261,14 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
 
 
 def main():
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        elif hasattr(sys.stdout, 'buffer'):
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description="Estimate token costs and $ spend for any codebase")
     parser.add_argument("--path",     "-p", default=".",      help="Directory to scan (default: .)")
     parser.add_argument("--file",     "-f",                   help="Scan a single file")

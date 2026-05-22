@@ -157,6 +157,14 @@ Examples:
 
 
 def main():
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        elif hasattr(sys.stdout, 'buffer'):
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print(HELP)
         sys.exit(0)

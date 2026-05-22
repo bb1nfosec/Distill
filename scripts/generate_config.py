@@ -278,7 +278,7 @@ Test: {info['test_cmd']}\"\"\"
 
 def write_file(path: Path, content: str, verbose: bool = False):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding='utf-8')
     size = len(content)
     tokens_est = size // 4
     marker = "✓" if tokens_est < 500 else ("⚠" if tokens_est < 1500 else "✗")
@@ -289,6 +289,14 @@ def write_file(path: Path, content: str, verbose: bool = False):
 
 
 def main():
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        elif hasattr(sys.stdout, 'buffer'):
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description="Generate optimized LLM configs for your project")
     parser.add_argument("--output", "-o", default=".", help="Project root to write configs to")
     parser.add_argument("--model",  "-m", default="claude",

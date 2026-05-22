@@ -25,11 +25,11 @@ SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
 def _read_llmignore(path: Path) -> list[str]:
     ig = path / ".llmignore"
-    return ig.read_text().splitlines() if ig.exists() else []
+    return ig.read_text(encoding='utf-8').splitlines() if ig.exists() else []
 
 
 def _write_llmignore(path: Path, lines: list[str]) -> None:
-    (path / ".llmignore").write_text("\n".join(lines) + "\n")
+    (path / ".llmignore").write_text("\n".join(lines) + "\n", encoding='utf-8')
 
 
 def run_fix(
@@ -105,7 +105,7 @@ def run_fix(
 
     # Write temporarily (even for dry-run) so after-scan is accurate
     ig_path          = path / ".llmignore"
-    original_content = ig_path.read_text() if ig_path.exists() else None
+    original_content = ig_path.read_text(encoding='utf-8') if ig_path.exists() else None
     _write_llmignore(path, new_lines)
 
     after        = scan_directory(path, model, respect_llmignore=True)
@@ -121,7 +121,7 @@ def run_fix(
         if original_content is None:
             ig_path.unlink(missing_ok=True)
         else:
-            ig_path.write_text(original_content)
+            ig_path.write_text(original_content, encoding='utf-8')
 
     print(f"\n  {'─'*54}")
     if dry_run:
@@ -145,6 +145,14 @@ def run_fix(
 
 
 def main():
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        elif hasattr(sys.stdout, 'buffer'):
+            import io
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
     parser = argparse.ArgumentParser(description="Auto-fix context waste by updating .llmignore")
     parser.add_argument("--path",         default=".", help="Project root to fix")
     parser.add_argument("--model",        default="claude", help="Model for token/cost estimates")
