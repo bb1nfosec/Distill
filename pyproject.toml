@@ -49,6 +49,7 @@ distill         = "core.cli:main"
 distill-scan    = "core.token_counter:main"
 distill-analyze = "core.context_analyzer:main"
 distill-check   = "core.check:main"
+distill-fix     = "core.fix:main"
 distill-mcp     = "distill_mcp.server:main"
 
 [tool.setuptools.packages.find]

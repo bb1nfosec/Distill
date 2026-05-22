@@ -96,6 +96,20 @@ def cmd_check(argv):
     )
 
 
+def cmd_fix(argv):
+    from core.fix import run_fix
+    p = argparse.ArgumentParser(prog="distill fix")
+    p.add_argument("--path",         "-p", default=".")
+    p.add_argument("--model",        "-m", default="claude")
+    p.add_argument("--dry-run",            action="store_true")
+    p.add_argument("--min-severity", "-s", default="high",
+                   choices=["high", "medium", "low"])
+    args = p.parse_args(argv)
+    return run_fix(Path(args.path).resolve(),
+                   model=args.model, dry_run=args.dry_run,
+                   min_severity=args.min_severity)
+
+
 def cmd_generate(argv):
     from scripts.generate_config import main as gen_main
     sys.argv = ["generate_config"] + argv
@@ -113,6 +127,7 @@ COMMANDS = {
     "scan":     cmd_scan,
     "analyze":  cmd_analyze,
     "check":    cmd_check,
+    "fix":      cmd_fix,
     "generate": cmd_generate,
     "version":  cmd_version,
 }
@@ -123,14 +138,18 @@ Commands:
   scan      Scan a directory and report token costs per file
   analyze   Detect waste patterns (lock files, generated code, etc.)
   check     Budget gate for CI — exits 1 if over context threshold
+  fix       Auto-fix waste: write .llmignore rules, show before/after savings
   generate  Auto-generate .llmignore, CLAUDE.md, and LLM configs
   version   Print version
 
 Examples:
   distill scan --path ./my-project
-  distill scan --path . --model gpt-4o --cost
+  distill scan --path . --model gpt-4o
   distill analyze --path ./my-project
   distill analyze --path ./my-project --fix
+  distill fix --path .                        # auto-write .llmignore rules
+  distill fix --path . --dry-run              # preview without writing
+  distill fix --path . --min-severity medium  # also fix medium-severity patterns
   distill check --path . --max-pct 30
   distill check --path . --max-pct 30 --fail-on-waste
   distill generate --output . --model all
