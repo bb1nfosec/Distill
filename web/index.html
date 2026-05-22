@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>distill — LLM Token Cost Analyzer</title>
+<meta name="description" content="Paste your code and instantly see which files are burning your Claude, GPT-4o, or Gemini tokens — and exactly what it costs per session.">
+<meta property="og:title" content="distill — LLM Token Cost Analyzer">
+<meta property="og:description" content="See which files are burning your Claude/GPT tokens. Instant, in-browser. No install.">
+<meta property="og:type" content="website">
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --green:    #3fb950;
+    --yellow:   #d29922;
+    --red:      #f85149;
+    --blue:     #58a6ff;
+    --purple:   #bc8cff;
+    --accent:   #238636;
+    --mono:     'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; min-height: 100vh; }
+
+  /* ── Nav ── */
+  nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 32px; border-bottom: 1px solid var(--border); }
+  .nav-logo { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 10px; }
+  .nav-logo span { color: var(--blue); }
+  .nav-links { display: flex; align-items: center; gap: 20px; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.875rem; transition: color .15s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-github { background: var(--surface); border: 1px solid var(--border); color: var(--text) !important; padding: 6px 14px; border-radius: 6px; font-size: 0.8rem !important; }
+  .nav-github:hover { border-color: var(--blue) !important; }
+
+  /* ── Hero ── */
+  .hero { text-align: center; padding: 64px 32px 48px; max-width: 760px; margin: 0 auto; }
+  .hero-badge { display: inline-block; background: #1c2b3a; border: 1px solid #1f6feb; color: var(--blue); font-size: 0.75rem; padding: 4px 12px; border-radius: 20px; margin-bottom: 20px; font-family: var(--mono); }
+  .hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 700; line-height: 1.2; margin-bottom: 16px; }
+  .hero h1 em { font-style: normal; color: var(--blue); }
+  .hero p { color: var(--muted); font-size: 1.05rem; max-width: 580px; margin: 0 auto 32px; }
+  .hero-stats { display: flex; justify-content: center; gap: 32px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat { text-align: center; }
+  .stat-n { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; color: var(--green); }
+  .stat-l { font-size: 0.75rem; color: var(--muted); }
+
+  /* ── Main layout ── */
+  .main { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 768px) { .main { grid-template-columns: 1fr; } }
+
+  /* ── Panels ── */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .panel-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .panel-body { padding: 20px; }
+
+  /* ── Input ── */
+  .input-area { width: 100%; min-height: 280px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 0.8rem; line-height: 1.6; padding: 14px; resize: vertical; outline: none; transition: border-color .2s; }
+  .input-area:focus { border-color: var(--blue); }
+  .input-area::placeholder { color: var(--muted); }
+
+  .controls { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .model-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 6px; font-size: 0.85rem; outline: none; cursor: pointer; }
+  .model-select:focus { border-color: var(--blue); }
+  .btn-analyze { background: var(--accent); border: 1px solid #2ea043; color: #fff; padding: 7px 20px; border-radius: 6px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  .btn-analyze:hover { opacity: .85; }
+  .btn-clear { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 7px 14px; border-radius: 6px; font-size: 0.875rem; cursor: pointer; }
+  .btn-clear:hover { border-color: var(--red); color: var(--red); }
+  .char-count { font-size: 0.75rem; color: var(--muted); font-family: var(--mono); margin-left: auto; }
+
+  /* ── Results ── */
+  #results { min-height: 340px; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; gap: 12px; color: var(--muted); }
+  .empty-icon { font-size: 2.5rem; opacity: .4; }
+  .empty-state p { font-size: 0.85rem; text-align: center; max-width: 220px; }
+
+  /* ── Summary card ── */
+  .summary { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; font-size: 0.875rem; }
+  .summary-label { color: var(--muted); font-family: var(--mono); font-size: 0.8rem; }
+  .summary-val { font-family: var(--mono); font-weight: 600; }
+  .green { color: var(--green); }
+  .yellow { color: var(--yellow); }
+  .red-col { color: var(--red); }
+  .blue { color: var(--blue); }
+
+  /* ── Context bar ── */
+  .ctx-bar-wrap { margin: 12px 0 4px; }
+  .ctx-bar-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); margin-bottom: 5px; font-family: var(--mono); }
+  .ctx-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .ctx-bar-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+
+  /* ── File table ── */
+  .file-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
+  .file-table th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .file-table td { padding: 6px 8px; border-bottom: 1px solid #1c2128; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+  .file-table tr:last-child td { border-bottom: none; }
+  .file-table tr:hover td { background: #1c2128; }
+  .pct-bar { display: inline-block; height: 4px; background: var(--blue); border-radius: 2px; vertical-align: middle; margin-right: 4px; opacity: .7; }
+
+  /* ── Recommendations ── */
+  .recs { margin-top: 16px; }
+  .rec-item { display: flex; gap: 10px; padding: 10px 12px; background: var(--bg); border-radius: 6px; margin-bottom: 8px; font-size: 0.82rem; border-left: 3px solid; }
+  .rec-high { border-color: var(--red); }
+  .rec-med { border-color: var(--yellow); }
+  .rec-ok { border-color: var(--green); }
+  .rec-icon { font-size: 1rem; line-height: 1.4; }
+  .rec-text { color: var(--muted); }
+  .rec-text strong { color: var(--text); }
+
+  /* ── Cost model grid ── */
+  .cost-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+  .cost-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
+  .cost-card-name { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); margin-bottom: 4px; }
+  .cost-card-val { font-family: var(--mono); font-weight: 700; font-size: 1rem; }
+  .cost-card-sub { font-size: 0.7rem; color: var(--muted); }
+
+  /* ── Quadratic visualizer ── */
+  .quad-section { grid-column: 1 / -1; }
+  canvas { width: 100%; border-radius: 6px; display: block; }
+
+  /* ── Install strip ── */
+  .install-strip { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .install-strip h3 { font-size: 1rem; margin-bottom: 4px; }
+  .install-strip p { color: var(--muted); font-size: 0.875rem; }
+  .install-code { font-family: var(--mono); font-size: 0.85rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+  .copy-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; white-space: nowrap; }
+  .copy-btn:hover { border-color: var(--blue); color: var(--blue); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="nav-logo">⬡ <span>distill</span></a>
+  <div class="nav-links">
+    <a href="#analyze">Analyze</a>
+    <a href="https://github.com/bb1nfosec/Distill/blob/main/benchmarks/results.md">Benchmarks</a>
+    <a href="https://github.com/bb1nfosec/Distill" class="nav-github">★ GitHub</a>
+  </div>
+</nav>
+
+<div class="hero" id="analyze">
+  <div class="hero-badge">Zero install · runs in your browser</div>
+  <h1>Which files are burning your<br><em>Claude / GPT tokens?</em></h1>
+  <p>Paste your code below. See the token cost and dollar spend — instantly, before you run a single API call.</p>
+  <div class="hero-stats">
+    <div class="stat"><div class="stat-n">0.00%</div><div class="stat-l">estimation error</div></div>
+    <div class="stat"><div class="stat-n">4</div><div class="stat-l">LLM providers</div></div>
+    <div class="stat"><div class="stat-n">42.9%</div><div class="stat-l">avg compaction saving</div></div>
+    <div class="stat"><div class="stat-n">1.8M</div><div class="stat-l">tokens/sec scan</div></div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Input panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Paste code or file contents</span>
+      <span id="charCount" class="char-count">0 chars</span>
+    </div>
+    <div class="panel-body">
+      <textarea class="input-area" id="inputArea" placeholder="Paste any code, file contents, or multiple files here...
+
+Example — try pasting:
+• A package.json + package-lock.json
+• Your largest source files
+• A CLAUDE.md or system prompt
+• Multiple files concatenated
+
+The analyzer will show token count, estimated cost,
+and whether this content is worth loading into context."></textarea>
+      <div class="controls">
+        <select class="model-select" id="modelSelect">
+          <option value="claude">Claude Sonnet ($3.00 / 1M)</option>
+          <option value="claude-haiku">Claude Haiku ($0.80 / 1M)</option>
+          <option value="claude-opus">Claude Opus ($15.00 / 1M)</option>
+          <option value="gpt-4o">GPT-4o ($2.50 / 1M)</option>
+          <option value="gpt-4o-mini">GPT-4o-mini ($0.15 / 1M)</option>
+          <option value="gemini-flash">Gemini 2.0 Flash ($0.10 / 1M)</option>
+          <option value="gemini-pro">Gemini 1.5 Pro ($1.25 / 1M)</option>
+          <option value="ollama">Ollama / local ($0.00)</option>
+        </select>
+        <button class="btn-analyze" onclick="analyze()">Analyze →</button>
+        <button class="btn-clear" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Analysis</span>
+      <span id="scanTime" style="font-size:.75rem;color:var(--muted);font-family:var(--mono)"></span>
+    </div>
+    <div class="panel-body" id="results">
+      <div class="empty-state">
+        <div class="empty-icon">⬡</div>
+        <p>Paste code on the left and click Analyze to see token cost breakdown</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quadratic cost visualizer -->
+  <div class="panel quad-section">
+    <div class="panel-header">
+      <span class="panel-title">Why token costs are quadratic — not linear</span>
+      <select class="model-select" id="quadModel" onchange="drawQuad()" style="font-size:.75rem;padding:4px 8px;">
+        <option value="claude">Claude Sonnet</option>
+        <option value="gpt-4o">GPT-4o</option>
+        <option value="gemini-flash">Gemini 2.0 Flash</option>
+        <option value="ollama">Ollama (local)</option>
+      </select>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:.82rem;color:var(--muted);margin-bottom:14px;">
+        Each LLM re-reads <strong style="color:var(--text)">the entire conversation history</strong> on every turn.
+        A 20-turn session can cost <strong style="color:var(--red)">120× more</strong> than turn 1.
+      </p>
+      <canvas id="quadChart" height="200"></canvas>
+      <div id="quadStats" style="display:flex;gap:24px;margin-top:12px;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
+  <!-- Install strip -->
+  <div class="install-strip">
+    <div>
+      <h3>Run it on your actual codebase</h3>
+      <p>The CLI scans your full repo — all files, real token counts, CI budget gates.</p>
+    </div>
+    <div>
+      <div class="install-code">
+        <code id="installCmd">pip install -e ".[tiktoken]" &amp;&amp; distill scan --path .</code>
+        <button class="copy-btn" onclick="copyInstall()">copy</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Pricing (USD per 1M input tokens) ────────────────────────────────────────
+const PRICING = {
+  "claude":        { rate: 3.00,  ctx: 200000, label: "Claude Sonnet 4.5" },
+  "claude-haiku":  { rate: 0.80,  ctx: 200000, label: "Claude Haiku 4.5" },
+  "claude-opus":   { rate: 15.00, ctx: 200000, label: "Claude Opus 4" },
+  "gpt-4o":        { rate: 2.50,  ctx: 128000, label: "GPT-4o" },
+  "gpt-4o-mini":   { rate: 0.15,  ctx: 128000, label: "GPT-4o-mini" },
+  "gemini-flash":  { rate: 0.10,  ctx: 1048576, label: "Gemini 2.0 Flash" },
+  "gemini-pro":    { rate: 1.25,  ctx: 1048576, label: "Gemini 1.5 Pro" },
+  "ollama":        { rate: 0.00,  ctx: 128000, label: "Ollama (local)" },
+};
+
+// ── Token estimation (cl100k approximation) ──────────────────────────────────
+function estimateTokens(text) {
+  if (!text) return 0;
+  // Approximation matching cl100k_base behaviour for code:
+  // - code averages ~3.8 chars/token (more tokens per char than prose)
+  // - common short tokens: {, }, (, ), ;, =, . etc.
+  let tokens = 0;
+  const words = text.split(/(\s+|[{}()\[\];,.<>!@#$%^&*+=|\\/?:'"~`-])/);
+  for (const w of words) {
+    if (!w || /^\s+$/.test(w)) { tokens += 1; continue; }
+    // Single punctuation chars = 1 token each
+    if (w.length === 1) { tokens += 1; continue; }
+    // Longer tokens: approx 4 chars per token
+    tokens += Math.max(1, Math.ceil(w.length / 4));
+  }
+  return tokens;
+}
+
+function formatTokens(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + "M";
+  if (n >= 1000)    return (n/1000).toFixed(1) + "k";
+  return String(n);
+}
+
+function formatCost(usd, rate) {
+  if (rate === 0) return "$0.000 (local)";
+  if (usd < 0.001) return "$" + usd.toFixed(5);
+  return "$" + usd.toFixed(4);
+}
+
+// ── Analyze ──────────────────────────────────────────────────────────────────
+function analyze() {
+  const t0 = performance.now();
+  const text  = document.getElementById("inputArea").value;
+  const model = document.getElementById("modelSelect").value;
+  if (!text.trim()) { showEmpty(); return; }
+
+  const { rate, ctx, label } = PRICING[model];
+  const tokens  = estimateTokens(text);
+  const cost    = tokens / 1_000_000 * rate;
+  const pct     = tokens / ctx * 100;
+  const ms      = (performance.now() - t0).toFixed(1);
+
+  document.getElementById("scanTime").textContent = `${ms}ms`;
+
+  // Split into logical chunks (separated by blank lines or "// File:" markers)
+  const chunks  = splitChunks(text);
+  const results = document.getElementById("results");
+
+  let pctColor = pct < 30 ? "green" : pct < 70 ? "yellow" : "red-col";
+  let pctMsg   = pct < 30 ? "✓ Healthy context" : pct < 70 ? "⚠ Getting heavy" : "✗ Over budget — add .llmignore";
+
+  // Build recs
+  const recs = buildRecs(chunks, tokens, text, model);
+
+  results.innerHTML = `
+    <div class="summary">
+      <div class="summary-row">
+        <span class="summary-label">Model</span>
+        <span class="summary-val blue">${label}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Tokens</span>
+        <span class="summary-val">${formatTokens(tokens)} / ${formatTokens(ctx)}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Per-session cost</span>
+        <span class="summary-val ${rate === 0 ? 'green' : ''}">${formatCost(cost, rate)}</span>
+      </div>
+      ${rate > 0 ? `<div class="summary-row">
+        <span class="summary-label">Sessions / $1</span>
+        <span class="summary-val">${cost > 0 ? Math.round(1/cost) : "∞"}</span>
+      </div>` : ''}
+      <div class="ctx-bar-wrap">
+        <div class="ctx-bar-label">
+          <span>${pctMsg}</span>
+          <span class="${pctColor}">${pct.toFixed(1)}% of context</span>
+        </div>
+        <div class="ctx-bar">
+          <div class="ctx-bar-fill" style="width:${Math.min(pct,100)}%;background:${pct<30?'var(--green)':pct<70?'var(--yellow)':'var(--red)'}"></div>
+        </div>
+      </div>
+    </div>
+
+    ${chunks.length > 1 ? `
+    <table class="file-table">
+      <thead><tr>
+        <th>Chunk</th><th>Tokens</th><th>Cost</th><th>% ctx</th>
+      </tr></thead>
+      <tbody>${chunks.slice(0,8).map(c => {
+        const ct = estimateTokens(c.text);
+        const cc = ct / 1_000_000 * rate;
+        const cp = ct / ctx * 100;
+        const bw = Math.min(cp * 3, 60);
+        return `<tr>
+          <td title="${c.name}">${c.name.slice(0,28)}</td>
+          <td><span class="pct-bar" style="width:${bw}px"></span>${formatTokens(ct)}</td>
+          <td>${formatCost(cc, rate)}</td>
+          <td class="${cp>20?'yellow':''}">${cp.toFixed(1)}%</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : ''}
+
+    ${recs.length ? `<div class="recs">${recs.map(r => `
+      <div class="rec-item rec-${r.level}">
+        <span class="rec-icon">${r.icon}</span>
+        <span class="rec-text">${r.text}</span>
+      </div>`).join('')}</div>` : ''}
+
+    <div class="cost-grid" style="margin-top:16px">
+      ${Object.entries(PRICING).filter(([k]) => k !== model).slice(0,4).map(([k,p]) => {
+        const c = tokens / 1_000_000 * p.rate;
+        return `<div class="cost-card">
+          <div class="cost-card-name">${p.label}</div>
+          <div class="cost-card-val ${p.rate === 0 ? 'green' : ''}">${formatCost(c, p.rate)}</div>
+          <div class="cost-card-sub">$${p.rate.toFixed(2)}/1M tokens</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function splitChunks(text) {
+  // Split on "// File:", "# File:", "--- ", or double newlines > 3 lines
+  const markers = text.split(/(?=(?:\/\/ File:|# File:|\/\*{2,}\s*\n\s*\*|={3,}|--- ))/);
+  if (markers.length > 1 && markers.length < 30) {
+    return markers.filter(m => m.trim()).map((m, i) => {
+      const firstLine = m.split('\n')[0].trim().replace(/^[/#*=-]+\s*/, '').slice(0,40) || `Chunk ${i+1}`;
+      return { name: firstLine, text: m };
+    });
+  }
+  // Split large blobs on double blank lines
+  const paras = text.split(/\n{3,}/);
+  if (paras.length > 2 && paras.length < 20) {
+    return paras.filter(p => p.trim().length > 50).map((p, i) => ({
+      name: `Block ${i+1}`,
+      text: p
+    }));
+  }
+  return [{ name: "Input", text }];
+}
+
+function buildRecs(chunks, tokens, text, model) {
+  const recs = [];
+  const { ctx, rate } = PRICING[model];
+  const pct = tokens / ctx * 100;
+
+  // Lock file detection
+  if (/package-lock\.json|yarn\.lock|pnpm-lock|bun\.lockb|Cargo\.lock|poetry\.lock/.test(text)) {
+    recs.push({ level: "high", icon: "🔴", text: "<strong>Lock file detected.</strong> This is costing you tokens every session. Add to <code>.llmignore</code> — it's never useful to an LLM." });
+  }
+
+  // .min.js / minified detection
+  if (/[a-z]{1000,}/.test(text.replace(/\s/g,''))) {
+    recs.push({ level: "high", icon: "🔴", text: "<strong>Minified or compressed content detected.</strong> Minified code is dense token waste. Add <code>**/*.min.js</code> to <code>.llmignore</code>." });
+  }
+
+  // Large tsbuildinfo
+  if (/\"diagnostics\"|\"version\":\s*\"\d+\.\d+\.\d+\"\s*,\s*\"options\"/.test(text)) {
+    recs.push({ level: "high", icon: "🔴", text: "<strong>tsconfig.tsbuildinfo detected.</strong> This is ~100k tokens of TypeScript compiler cache. Ignore it immediately." });
+  }
+
+  // Very large file
+  if (pct > 50) {
+    recs.push({ level: "med", icon: "⚠️", text: `<strong>${pct.toFixed(0)}% of context window.</strong> If the LLM only needs part of this, load specific functions instead of the full file.` });
+  }
+
+  // Cost-effective model suggestion
+  if (rate > 1 && tokens > 5000) {
+    const haiku = tokens / 1_000_000 * 0.80;
+    const flash = tokens / 1_000_000 * 0.10;
+    recs.push({ level: "ok", icon: "💡", text: `<strong>Cheaper alternatives for this content:</strong> Claude Haiku ${formatCost(haiku, 0.80)}/session · Gemini 2.0 Flash ${formatCost(flash, 0.10)}/session` });
+  }
+
+  // Healthy
+  if (!recs.length && pct < 30) {
+    recs.push({ level: "ok", icon: "✅", text: "<strong>Looking good.</strong> This content is well within budget for a single context load." });
+  }
+
+  return recs;
+}
+
+function showEmpty() {
+  document.getElementById("results").innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">⬡</div>
+      <p>Paste some code first</p>
+    </div>`;
+}
+
+function clearAll() {
+  document.getElementById("inputArea").value = "";
+  document.getElementById("charCount").textContent = "0 chars";
+  showEmpty();
+  document.getElementById("scanTime").textContent = "";
+}
+
+// Char count
+document.getElementById("inputArea").addEventListener("input", function() {
+  const n = this.value.length;
+  document.getElementById("charCount").textContent =
+    n >= 1000 ? (n/1000).toFixed(1) + "k chars" : n + " chars";
+});
+
+// ── Quadratic chart ───────────────────────────────────────────────────────────
+function drawQuad() {
+  const canvas = document.getElementById("quadChart");
+  const model  = document.getElementById("quadModel").value;
+  const { rate, label } = PRICING[model];
+  const dpr    = window.devicePixelRatio || 1;
+  const W      = canvas.parentElement.clientWidth - 40;
+  const H      = 200;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + "px";
+  canvas.style.height = H + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const BG    = "#0d1117";
+  const GRID  = "#21262d";
+  const RLINE = "#f85149";
+  const GLINE = "#3fb950";
+  const TEXT  = "#8b949e";
+
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, H);
+
+  const PAD = { top: 16, right: 20, bottom: 36, left: 56 };
+  const cw = W - PAD.left - PAD.right;
+  const ch = H - PAD.top - PAD.bottom;
+
+  const TURNS     = 20;
+  const SYS_TOK   = 300;
+  const MSG_TOK   = 180;
+  const REPLY_TOK = 800;
+
+  // Without compaction: quadratic
+  const withoutData  = [];
+  const withData     = [];
+  let cumHist    = 0;
+  let compactCtx = SYS_TOK;
+  for (let t = 1; t <= TURNS; t++) {
+    withoutData.push(SYS_TOK + cumHist + MSG_TOK);
+    if (t === 5) {
+      const hist = compactCtx - SYS_TOK;
+      compactCtx = SYS_TOK + Math.round(hist * 0.18);
+    }
+    withData.push(compactCtx + MSG_TOK);
+    cumHist   += MSG_TOK + REPLY_TOK;
+    compactCtx += MSG_TOK + REPLY_TOK;
+  }
+
+  const maxY = Math.max(...withoutData) * 1.05;
+
+  function tx(t) { return PAD.left + ((t-1) / (TURNS-1)) * cw; }
+  function ty(v) { return PAD.top + ch * (1 - v / maxY); }
+
+  // Grid lines
+  ctx.strokeStyle = GRID;
+  ctx.lineWidth   = 1;
+  [0.25, 0.5, 0.75, 1].forEach(f => {
+    const y = PAD.top + ch * (1 - f);
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + cw, y); ctx.stroke();
+    ctx.fillStyle = TEXT; ctx.font = "11px monospace"; ctx.textAlign = "right";
+    ctx.fillText(formatTokens(Math.round(maxY * f)), PAD.left - 6, y + 4);
+  });
+
+  // X axis labels
+  ctx.fillStyle = TEXT; ctx.font = "11px monospace"; ctx.textAlign = "center";
+  [1, 5, 10, 15, 20].forEach(t => {
+    ctx.fillText("t" + t, tx(t), H - PAD.bottom + 16);
+  });
+
+  // Without compaction line
+  ctx.beginPath(); ctx.strokeStyle = RLINE; ctx.lineWidth = 2.5;
+  withoutData.forEach((v, i) => {
+    i === 0 ? ctx.moveTo(tx(i+1), ty(v)) : ctx.lineTo(tx(i+1), ty(v));
+  });
+  ctx.stroke();
+
+  // With compaction line
+  ctx.beginPath(); ctx.strokeStyle = GLINE; ctx.lineWidth = 2.5;
+  withData.forEach((v, i) => {
+    i === 0 ? ctx.moveTo(tx(i+1), ty(v)) : ctx.lineTo(tx(i+1), ty(v));
+  });
+  ctx.stroke();
+
+  // Compact marker
+  ctx.strokeStyle = "#58a6ff"; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(tx(5), PAD.top); ctx.lineTo(tx(5), PAD.top + ch); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#58a6ff"; ctx.font = "10px monospace"; ctx.textAlign = "center";
+  ctx.fillText("/compact", tx(5), PAD.top + 8);
+
+  // Legend
+  ctx.textAlign = "left";
+  [[RLINE, "Without compaction"], [GLINE, "With /compact at turn 5"]].forEach(([c, l], i) => {
+    const lx = PAD.left + i * 200;
+    ctx.fillStyle = c; ctx.fillRect(lx, H - 14, 16, 3);
+    ctx.fillStyle = TEXT; ctx.font = "11px monospace";
+    ctx.fillText(l, lx + 22, H - 10);
+  });
+
+  // Stats
+  const totalWithout = withoutData.reduce((a,b) => a+b, 0);
+  const totalWith    = withData.reduce((a,b) => a+b, 0);
+  const saved        = totalWithout - totalWith;
+  const costW        = totalWithout / 1_000_000 * rate;
+  const costC        = totalWith    / 1_000_000 * rate;
+
+  const stats = document.getElementById("quadStats");
+  stats.innerHTML = [
+    ["Turn 20 without compact",  formatTokens(withoutData[19]) + " tokens", "red-col"],
+    ["Turn 20 with /compact",    formatTokens(withData[19])    + " tokens", "green"],
+    ["20-turn cost (no compact)", formatCost(costW, rate), "red-col"],
+    ["20-turn cost (compact)",   formatCost(costC, rate), "green"],
+  ].map(([l,v,c]) => `<div class="stat"><div class="stat-n ${c}" style="font-size:.95rem">${v}</div><div class="stat-l">${l}</div></div>`).join('');
+}
+
+window.addEventListener("resize", drawQuad);
+drawQuad();
+
+// ── Copy install command ──────────────────────────────────────────────────────
+function copyInstall() {
+  const cmd = 'git clone https://github.com/bb1nfosec/Distill && cd Distill && pip install -e ".[tiktoken]" && distill scan --path .';
+  navigator.clipboard.writeText(cmd).catch(() => {});
+  const btn = document.querySelector(".copy-btn");
+  btn.textContent = "copied!";
+  setTimeout(() => btn.textContent = "copy", 2000);
+}
+</script>
+</body>
+</html>

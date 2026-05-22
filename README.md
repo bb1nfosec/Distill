@@ -19,7 +19,9 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-a855f7)](CONTRIBUTING.md)
 [![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-f59e0b)](requirements.txt)
 
-[Quick Start](#-quick-start) · [Benchmarks](#-benchmarks) · [How It Works](#-how-it-works) · [Python API](#-python-api) · [CLI Reference](#-cli-reference) · [All Providers](#-supported-providers)
+[Quick Start](#-quick-start) · [Try Online](https://bb1nfosec.github.io/Distill) · [Benchmarks](#-benchmarks) · [How It Works](#-how-it-works) · [Python API](#-python-api) · [CLI Reference](#-cli-reference)
+
+![distill demo](assets/demo.gif)
 
 </div>
 
