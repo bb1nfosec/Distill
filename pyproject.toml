@@ -33,7 +33,8 @@ tiktoken = ["tiktoken>=0.7.0"]
 claude   = ["anthropic>=0.40.0"]
 openai   = ["openai>=1.50.0"]
 gemini   = ["google-generativeai>=0.8.0"]
-all      = ["tiktoken>=0.7.0", "anthropic>=0.40.0", "openai>=1.50.0", "google-generativeai>=0.8.0"]
+mcp      = ["mcp>=1.0.0"]
+all      = ["tiktoken>=0.7.0", "anthropic>=0.40.0", "openai>=1.50.0", "google-generativeai>=0.8.0", "mcp>=1.0.0"]
 dev      = ["pytest>=8.0.0", "tiktoken>=0.7.0"]
 
 [project.urls]
@@ -48,10 +49,11 @@ distill         = "core.cli:main"
 distill-scan    = "core.token_counter:main"
 distill-analyze = "core.context_analyzer:main"
 distill-check   = "core.check:main"
+distill-mcp     = "distill_mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "adapters*", "scripts*"]
+include = ["core*", "adapters*", "scripts*", "distill_mcp*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed"]
