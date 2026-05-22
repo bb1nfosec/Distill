@@ -13,6 +13,7 @@
 
 *Universal token optimization toolkit — Claude, OpenAI, Gemini, Ollama, any LLM.*
 
+[![PyPI](https://img.shields.io/pypi/v/distill-llm?color=0073b7&logo=pypi&logoColor=white)](https://pypi.org/project/distill-llm/)
 [![CI](https://github.com/bb1nfosec/distill/actions/workflows/ci.yml/badge.svg)](https://github.com/bb1nfosec/distill/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
@@ -61,9 +62,7 @@ A typical 20-turn Claude Code session burns **40,000–100,000 tokens**. Distill
 ## 🚀 Quick Start
 
 ```bash
-git clone https://github.com/bb1nfosec/distill
-cd distill
-pip install -e ".[tiktoken]"     # zero hard deps — tiktoken is optional but recommended
+pip install "distill-llm[tiktoken]"   # tiktoken optional but recommended for exact counts
 ```
 
 **Audit your project's token cost and dollar spend in 30 seconds:**
@@ -252,7 +251,7 @@ llm = MyLLMAdapter(model="my-model-v1", auto_compact_threshold=0.70)
 Install once and use `distill` everywhere:
 
 ```bash
-pip install -e ".[tiktoken]"   # from repo root
+pip install "distill-llm[tiktoken]"
 ```
 
 ### `distill scan`
