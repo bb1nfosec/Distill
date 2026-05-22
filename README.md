@@ -137,6 +137,34 @@ Turn 20:   500          +  76,000            + 200       =  76,700
 
 ---
 
+## 🧩 MCP Server — Claude Skills for Your Org
+
+Install distill as a native Claude tool so every team member gets `scan_tokens`, `check_budget`, `analyze_context`, and `generate_llmignore` in every conversation — no slash commands required.
+
+```bash
+pip install "distill-llm[mcp]"
+```
+
+Add to Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) or project `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "distill": {
+      "command": "distill-mcp"
+    }
+  }
+}
+```
+
+Then just ask Claude: *"Scan this project's token usage"* or *"Check if we're within a 30% context budget."*
+
+**Claude Code slash commands** — copy `.claude/commands/` into your project for `/distill-scan`, `/distill-check`, `/distill-analyze`, `/distill-generate`.
+
+→ [Full org setup guide](docs/mcp-setup.md)
+
+---
+
 ## 🔌 Supported Providers
 
 | Provider | Config generated | Adapter | Key optimizations |

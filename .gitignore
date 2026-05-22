@@ -15,3 +15,5 @@ build/
 *.log
 .DS_Store
 .claude/
+!.claude/commands/
+!.claude/commands/*.md
