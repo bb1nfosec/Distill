@@ -12,6 +12,7 @@ Usage:
 import os
 import sys
 import argparse
+import fnmatch
 from pathlib import Path
 
 MODEL_RATIOS = {
@@ -120,7 +121,10 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
             d for d in dirs
             if d not in SKIP_DIRS
             and not d.startswith(".")
-            and d not in ignore_patterns
+            and not any(
+                d == p or fnmatch.fnmatch(d, p)
+                for p in ignore_patterns
+            )
         ]
 
         for fname in files:
@@ -131,8 +135,12 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
                 continue
 
             skip = False
+            rel_str = str(rel_path)
             for pattern in ignore_patterns:
-                if pattern in str(rel_path) or fname == pattern:
+                if (pattern in rel_str
+                        or fname == pattern
+                        or fnmatch.fnmatch(fname, pattern)
+                        or fnmatch.fnmatch(rel_str, pattern)):
                     skip = True
                     break
             if skip:
