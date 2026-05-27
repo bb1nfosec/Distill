@@ -1,6 +1,6 @@
 # Universal LLM Token Optimization Tips
 
-These apply to **every LLM** — Claude, GPT-4, Gemini, Llama, Mistral, anything.
+These apply to **every LLM** - Claude, GPT-4, Gemini, Llama, Mistral, anything.
 
 ---
 
@@ -8,7 +8,7 @@ These apply to **every LLM** — Claude, GPT-4, Gemini, Llama, Mistral, anything
 
 Token costs are **quadratic**, not linear.
 
-Every LLM re-reads the entire conversation on every turn. Turn 10 costs roughly 10x what turn 1 costs in input tokens — because the model re-reads turns 1–9 every time. This is why a long session burns tokens fast.
+Every LLM re-reads the entire conversation on every turn. Turn 10 costs roughly 10x what turn 1 costs in input tokens - because the model re-reads turns 1–9 every time. This is why a long session burns tokens fast.
 
 ```
 Turn 1:  ~500 tokens
@@ -62,7 +62,7 @@ Bad:
 Good:
 ```
 "Refactor src/auth/jwt.ts and src/middleware/authGuard.ts.
-Do not read other files — the issue is only in those two."
+Do not read other files - the issue is only in those two."
 ```
 
 Every file the LLM reads = hundreds to thousands of tokens consumed immediately.
@@ -76,14 +76,14 @@ When you need the LLM to understand a codebase, use a **fresh context** for the 
 
 Get a summary back. Use that summary in your main task context.
 
-**Why**: codebase exploration reads dozens of files — each one bloats your context for every subsequent message.
+**Why**: codebase exploration reads dozens of files - each one bloats your context for every subsequent message.
 
 ### 5. Compact or clear between tasks
 
 After finishing a feature or task:
-- **Claude Code**: `/compact` — summarizes history, frees space
+- **Claude Code**: `/compact` - summarizes history, frees space
 - **OpenAI / other**: summarize the conversation yourself and start fresh
-- **Ollama**: `/bye` and restart — Ollama has no built-in compaction
+- **Ollama**: `/bye` and restart - Ollama has no built-in compaction
 
 ---
 
@@ -96,7 +96,7 @@ After finishing a feature or task:
 - Subagents are the most powerful tool for context isolation
 
 ### OpenAI GPT-4o / GPT-4-turbo
-- System prompt is re-sent every request — keep it under 500 tokens
+- System prompt is re-sent every request - keep it under 500 tokens
 - Use `max_tokens` to cap response length on simple tasks
 - GPT-4o-mini is 15x cheaper for tasks that don't need GPT-4o quality
 
@@ -106,13 +106,13 @@ After finishing a feature or task:
 - Flash models are 10-20x cheaper for most coding tasks
 
 ### Ollama (local models)
-- **Always set `num_ctx`** — default 2048 is too small for real tasks
-- Context is RAM — 8k ctx on llama3.1:8b needs ~6GB VRAM
+- **Always set `num_ctx`** - default 2048 is too small for real tasks
+- Context is RAM - 8k ctx on llama3.1:8b needs ~6GB VRAM
 - Use smaller models (3b) for simple edits, larger for architecture
 
 ### Any OpenAI-compatible API (LiteLLM, Groq, Together, etc.)
-- Same rules as OpenAI — the protocol is identical
-- Check each provider's actual tokenizer — costs vary significantly
+- Same rules as OpenAI - the protocol is identical
+- Check each provider's actual tokenizer - costs vary significantly
 
 ---
 

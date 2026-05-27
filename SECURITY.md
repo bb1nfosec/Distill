@@ -10,7 +10,7 @@
 
 **Do not open a public issue for security vulnerabilities.**
 
-Contact the project maintainers with the subject line `[SECURITY] distill — <short description>`.
+Contact the project maintainers with the subject line `[SECURITY] distill - <short description>`.
 
 Include:
 - A description of the vulnerability and its impact
@@ -24,6 +24,6 @@ You will receive an acknowledgement within 48 hours and a resolution timeline wi
 
 The main surface area to consider:
 
-- **API key handling** — adapters read keys from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). They are never logged or written to disk.
-- **File path inputs** — `token_counter.py` and `context_analyzer.py` accept `--path` arguments. Paths are resolved with `Path.resolve()` and only read, never executed.
-- **Dependencies** — `tiktoken`, `anthropic`, `openai`. Pin versions in production environments.
+- **API key handling** - adapters read keys from environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). They are never logged or written to disk.
+- **File path inputs** - `token_counter.py` and `context_analyzer.py` accept `--path` arguments. Paths are resolved with `Path.resolve()` and only read, never executed.
+- **Dependencies** - `tiktoken`, `anthropic`, `openai`. Pin versions in production environments.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-token_counter.py — Estimate token costs and dollar spend for any LLM.
+token_counter.py - Estimate token costs and dollar spend for any LLM.
 
 Usage:
     python3 core/token_counter.py --path ./my-project
@@ -41,7 +41,7 @@ CONTEXT_LIMITS = {
     "ollama":             128_000,
 }
 
-# USD per 1M input tokens (input rate — what a scan estimate represents)
+# USD per 1M input tokens (input rate - what a scan estimate represents)
 PRICING = {
     "claude":          3.00,   # claude-sonnet-4-5/4-6
     "claude-sonnet":   3.00,
@@ -53,7 +53,7 @@ PRICING = {
     "gemini":          1.25,   # gemini-1.5-pro
     "gemini-1.5-pro":  1.25,
     "gemini-2.0-flash":0.10,
-    "ollama":          0.00,   # local — free
+    "ollama":          0.00,   # local - free
     "generic":         2.50,
 }
 
@@ -109,7 +109,7 @@ def estimate_tokens(text: str, model: str = "generic") -> int:
     except ImportError:
         if not _TIKTOKEN_WARNING_SHOWN:
             warnings.warn(
-                "tiktoken not installed — token counts are approximate "
+                "tiktoken not installed - token counts are approximate "
                 "(character-based estimation). Install tiktoken for accurate counts: "
                 "pip install tiktoken",
                 stacklevel=2,
@@ -273,7 +273,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     rate  = PRICING.get(model, PRICING["generic"])
 
     print(f"\n{BOLD}{'─'*62}{NC}")
-    print(f"{BOLD}  distill — Context Audit{NC}")
+    print(f"{BOLD}  distill - Context Audit{NC}")
     print(f"{'─'*62}")
     print(f"  Model         : {model}  (${rate:.2f} / 1M input tokens)")
     print(f"  Context limit : {format_number(limit)} tokens")
@@ -287,11 +287,11 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     print(f"{'─'*62}\n")
 
     if pct > 100:
-        print(f"  {RED}✗ OVER CONTEXT LIMIT{NC} — LLM cannot read all files in one pass")
+        print(f"  {RED}✗ OVER CONTEXT LIMIT{NC} - LLM cannot read all files in one pass")
         print(f"    → Add paths to .llmignore")
         print(f"    → Use subagents for different subsystems\n")
     elif pct > 70:
-        print(f"  {YELLOW}⚠  Heavy context{NC} — quality may degrade near limit")
+        print(f"  {YELLOW}⚠  Heavy context{NC} - quality may degrade near limit")
         print(f"    → Review top files below and ignore the largest unnecessary ones\n")
     else:
         print(f"  {GREEN}✓ Context healthy{NC}\n")
@@ -324,7 +324,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     if skipped_results:
         print(f"\n  {YELLOW}⚠  {len(skipped_results)} file(s) skipped (over size limit):{NC}")
         for sr in skipped_results[:5]:
-            print(f"      {sr['path']}  ({sr['size_kb']}KB — {sr['skip_reason']})")
+            print(f"      {sr['path']}  ({sr['size_kb']}KB - {sr['skip_reason']})")
         if len(skipped_results) > 5:
             print(f"      ... and {len(skipped_results) - 5} more")
 
@@ -332,7 +332,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
 
     large_files = [r for r in active_results if r["tokens"] > 5000]
     if large_files:
-        print(f"  {YELLOW}→{NC} {len(large_files)} files over 5k tokens — split or ignore:")
+        print(f"  {YELLOW}→{NC} {len(large_files)} files over 5k tokens - split or ignore:")
         for f in large_files[:3]:
             print(f"      {f['path']} ({format_number(f['tokens'])} tokens, {format_cost(f['cost_usd'])})")
 
@@ -342,7 +342,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     if lock_files:
         tot = sum(r["tokens"] for r in lock_files)
         cost = sum(r["cost_usd"] for r in lock_files)
-        print(f"  {RED}→{NC} Lock files: {format_number(tot)} tokens ({format_cost(cost)}) — add to .llmignore")
+        print(f"  {RED}→{NC} Lock files: {format_number(tot)} tokens ({format_cost(cost)}) - add to .llmignore")
 
     _gen_dirs = {"dist", "build", "generated"}
     _gen_exts = {".min.js", ".min.css", ".bundle.js"}
@@ -354,7 +354,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     generated = [r for r in active_results if _is_gen(r["path"])]
     if generated:
         tot = sum(r["tokens"] for r in generated)
-        print(f"  {YELLOW}→{NC} Generated/built files: {format_number(tot)} tokens — ignore them")
+        print(f"  {YELLOW}→{NC} Generated/built files: {format_number(tot)} tokens - ignore them")
 
     print(f"\n{'─'*62}\n")
 

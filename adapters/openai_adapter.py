@@ -1,5 +1,5 @@
 """
-openai_adapter.py — Token-optimized adapter for OpenAI GPT models.
+openai_adapter.py - Token-optimized adapter for OpenAI GPT models.
 
 Features:
 - Automatic history trimming when approaching context limit
@@ -44,7 +44,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         "o3-mini":          200_000,
     }
 
-    # Lean system prompt — add your project context below this
+    # Lean system prompt - add your project context below this
     LEAN_SYSTEM_PREFIX = (
         "You are a terse, precise coding assistant. "
         "Rules: respond with code only unless asked; batch all edits; "
@@ -87,7 +87,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             import core.token_counter as _tc
             if not _tc._TIKTOKEN_WARNING_SHOWN:
                 warnings.warn(
-                    "tiktoken not installed — token counts are approximate "
+                    "tiktoken not installed - token counts are approximate "
                     "(character-based estimation). Install tiktoken for accurate counts: "
                     "pip install tiktoken",
                     stacklevel=2,

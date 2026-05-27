@@ -1,5 +1,5 @@
 """
-base_adapter.py — Abstract base for all LLM adapters.
+base_adapter.py - Abstract base for all LLM adapters.
 
 Every adapter implements the same interface so your optimization
 tooling works identically across Claude, OpenAI, Gemini, and Ollama.
@@ -118,7 +118,7 @@ class BaseLLMAdapter(ABC):
         current_context = self._estimate_context_size()
         if current_context > self.max_context_tokens * self.auto_compact_threshold:
             print(f"[TokenOptimizer] Context at {current_context:,} tokens "
-                  f"({current_context/self.max_context_tokens*100:.0f}%) — auto-compacting...")
+                  f"({current_context/self.max_context_tokens*100:.0f}%) - auto-compacting...")
             self.compact()
 
         self._history.append(Message(role="user", content=user_message))
@@ -217,7 +217,7 @@ class BaseLLMAdapter(ABC):
         """Print session token usage summary."""
         s = self.stats.summary()
         print(f"\n{'─'*50}")
-        print(f"  Session stats — {s['model']}")
+        print(f"  Session stats - {s['model']}")
         print(f"{'─'*50}")
         print(f"  Turns           : {s['turns']}")
         print(f"  Total tokens    : {s['total_tokens']:,}")
@@ -269,10 +269,10 @@ class BaseLLMAdapter(ABC):
             head = lines[:half]
             tail = lines[-half:]
             if start_line is not None or end_line is not None:
-                print(f"[TokenOptimizer] {file_path} range has {len(lines)} lines — "
+                print(f"[TokenOptimizer] {file_path} range has {len(lines)} lines - "
                       f"truncating to {max_lines}. Narrow the range for full content.")
             else:
-                print(f"[TokenOptimizer] {file_path} has {total_line_count} lines — "
+                print(f"[TokenOptimizer] {file_path} has {total_line_count} lines - "
                       f"truncating to {max_lines}. Use start_line/end_line for specific sections.")
             lines = head + [f"\n... [{omitted} lines omitted]\n"] + tail
 

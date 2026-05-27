@@ -5,12 +5,12 @@
 **You're probably sending `.env` files to your LLM right now. And paying for it.**
 
 [![PyPI](https://img.shields.io/pypi/v/distill-llm?color=0073b7&logo=pypi&logoColor=white)](https://pypi.org/project/distill-llm/)
-[![CI](https://github.com/bb1nfosec/Distill/actions/workflows/ci.yml/badge.svg)](https://github.com/bb1nfosec/Distill/actions/workflows/ci.yml)
+[![CI](https://github.com/distill-team/Distill/actions/workflows/ci.yml/badge.svg)](https://github.com/distill-team/Distill/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 [![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-f59e0b)](pyproject.toml)
 
-[Install](#install) · [CLI](#cli) · [MCP Server](#mcp-server) · [Python API](#python-api) · [Benchmarks](#benchmarks) · [Try Online](https://bb1nfosec.github.io/Distill)
+[Install](#install) · [CLI](#cli) · [MCP Server](#mcp-server) · [Python API](#python-api) · [Benchmarks](#benchmarks) · [Try Online](https://distill-team.github.io/Distill)
 
 ![distill demo](assets/demo.gif)
 
@@ -23,7 +23,7 @@ Distill scans your codebase, tells you exactly what's eating your tokens and wha
 ```
 $ distill fix --path ./my-project
 
-  distill fix  —  ./my-project
+  distill fix  -  ./my-project
   ──────────────────────────────────────────────────────
   Before  : 166.8k tokens  (83.4% ctx)  $0.50/session
 
@@ -61,7 +61,7 @@ A typical Claude Code session runs 15–20 turns. At Sonnet pricing, a bloated c
 ## Install
 
 ```bash
-pip install "distill-llm[tiktoken]"   # recommended — exact token counts
+pip install "distill-llm[tiktoken]"   # recommended - exact token counts
 pip install "distill-llm[all]"        # + Claude, OpenAI, Gemini adapters + MCP server
 pip install distill-llm               # core only, zero hard dependencies
 ```
@@ -74,7 +74,7 @@ pip install distill-llm               # core only, zero hard dependencies
 distill scan     --path .                     # see what's burning tokens + dollar cost
 distill analyze  --path .                     # find the waste patterns
 distill fix      --path .                     # write .llmignore rules automatically
-distill check    --path . --max-pct 30        # CI gate — exits 1 if over budget
+distill check    --path . --max-pct 30        # CI gate - exits 1 if over budget
 distill generate --output . --model all       # generate CLAUDE.md, Modelfile, configs
 ```
 
@@ -85,7 +85,7 @@ Shows every file that would enter your LLM context and its exact token cost.
 ```bash
 $ distill scan --path ./my-project
 
-  distill — Context Audit
+  distill - Context Audit
   ──────────────────────────────────────────────────────────────
   Model         : claude  ($3.00 / 1M input tokens)
   Files scanned : 247
@@ -112,7 +112,7 @@ distill fix --path . --min-severity low  # catch medium/low patterns too
 distill fix --path . --model gpt-4o      # price against GPT-4o instead
 ```
 
-### check — CI gate
+### check - CI gate
 
 ```bash
 distill check --path . --max-pct 30
@@ -140,7 +140,7 @@ distill analyze --path . --json   # pipe to your own tooling
 
 ## MCP Server
 
-Makes distill a native tool Claude can call on its own — no slash commands, no manual prompting.
+Makes distill a native tool Claude can call on its own - no slash commands, no manual prompting.
 
 ```bash
 pip install "distill-llm[mcp]"
@@ -158,7 +158,7 @@ Add to `claude_desktop_config.json` or `.mcp.json`:
 
 Claude gets five tools: `scan_tokens`, `analyze_context`, `fix_context`, `check_budget`, `generate_llmignore`. It'll call them when relevant without you asking.
 
-**Claude Code slash commands** — drop `.claude/commands/` into any project:
+**Claude Code slash commands** - drop `.claude/commands/` into any project:
 
 ```
 /distill-scan     token audit with dollar costs
@@ -185,25 +185,25 @@ llm = ClaudeAdapter(model="claude-sonnet-4-5", enable_caching=True)
 # llm = OllamaAdapter(model="llama3.2", num_ctx=8192)
 
 response = llm.chat("Refactor the auth module to use JWT")
-llm.compact()       # compress history — call between task phases
+llm.compact()       # compress history - call between task phases
 llm.print_stats()   # tokens used, cache hit rate, latency
 ```
 
-**Prompt caching (Claude)** — static context is cached automatically. Cache hit = 90% cheaper than a fresh read.
+**Prompt caching (Claude)** - static context is cached automatically. Cache hit = 90% cheaper than a fresh read.
 
-**Subagents** — run research in a separate context window so it doesn't pile up in yours:
+**Subagents** - run research in a separate context window so it doesn't pile up in yours:
 
 ```python
 summary = claude.run_subagent(
     task="How does our auth handle token refresh? Any edge cases?",
     context_files=["src/auth/jwt.ts", "src/middleware/authGuard.ts"]
 )
-# [Subagent] Research complete — 4,200 tokens used in separate context
+# [Subagent] Research complete - 4,200 tokens used in separate context
 
 response = claude.chat(f"Given: {summary}\nNow add refresh token rotation.")
 ```
 
-**Lazy file loading** — warns on oversized files, truncates at a line limit:
+**Lazy file loading** - warns on oversized files, truncates at a line limit:
 
 ```python
 content = llm.load_file_lazy("src/api/routes.ts", max_lines=150)
@@ -267,7 +267,7 @@ Real numbers on real projects.
 | After | 6,500 | 3.2% |
 | **Saved** | **160,300** | **96.1% reduction** |
 
-`package-lock.json` (122k tokens), `tsconfig.tsbuildinfo` (103k), test snapshots (4k) — all gone in one command.
+`package-lock.json` (122k tokens), `tsconfig.tsbuildinfo` (103k), test snapshots (4k) - all gone in one command.
 
 ### Compaction savings over a 10-turn session
 
@@ -297,7 +297,7 @@ python3 benchmarks/run_benchmarks.py --path /yours    # run on your project
 
 **`.llmignore` first.** Run `distill fix` once on any project before you start. It takes 10 seconds and saves the most money.
 
-**Keep `CLAUDE.md` lean.** It loads on every single session — every line is a per-session tax forever.
+**Keep `CLAUDE.md` lean.** It loads on every single session - every line is a per-session tax forever.
 ```
 CLAUDE.md size       Cost/session    Cost over 100 sessions
 ───────────────────  ──────────────  ──────────────────────
@@ -308,7 +308,7 @@ CLAUDE.md size       Cost/session    Cost over 100 sessions
 
 **Research in a subagent.** Files you load for research stay in context for the rest of the session. Push them to a subagent and only the summary comes back.
 
-**Compact between tasks.** History never gets cheaper. `/compact` in Claude Code or `llm.compact()` when switching tasks — 42.9% token reduction in a 10-turn session.
+**Compact between tasks.** History never gets cheaper. `/compact` in Claude Code or `llm.compact()` when switching tasks - 42.9% token reduction in a 10-turn session.
 
 ---
 
@@ -316,8 +316,8 @@ CLAUDE.md size       Cost/session    Cost over 100 sessions
 
 | Provider | Adapter | Config generated | Notes |
 |---|---|---|---|
-| Claude API | `ClaudeAdapter` | system prompt | Prompt caching — up to 90% cost cut on static context |
-| Claude Code | — | `CLAUDE.md` + `.claudeignore` | Subagents, `/compact`, lean config |
+| Claude API | `ClaudeAdapter` | system prompt | Prompt caching - up to 90% cost cut on static context |
+| Claude Code | - | `CLAUDE.md` + `.claudeignore` | Subagents, `/compact`, lean config |
 | GPT-4o / mini | `OpenAIAdapter` | `openai_system.md` | Works with any OpenAI-compatible endpoint |
 | Gemini 2.0 Flash | `GeminiAdapter` | `gemini_system.md` | 1M ctx window, $0.10/1M |
 | Ollama (local) | `OllamaAdapter` | `Modelfile` | `num_ctx` tuning, free |
@@ -327,7 +327,7 @@ CLAUDE.md size       Cost/session    Cost over 100 sessions
 
 ## Security note
 
-`.llmignore` blocks `.env`, `.env.*`, `*.pem`, `*.key`, and credential files by default. `distill check --fail-on-waste` in CI catches un-ignored secrets and lock files before they hit a PR. The file itself is checked in and diff-able — treat it like any other security config.
+`.llmignore` blocks `.env`, `.env.*`, `*.pem`, `*.key`, and credential files by default. `distill check --fail-on-waste` in CI catches un-ignored secrets and lock files before they hit a PR. The file itself is checked in and diff-able - treat it like any other security config.
 
 ---
 
@@ -336,8 +336,8 @@ CLAUDE.md size       Cost/session    Cost over 100 sessions
 PRs welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
 
 Most useful right now:
-- `adapters/litellm_adapter.py` — LiteLLM unified proxy support
-- VS Code extension — real-time token counter in the status bar
+- `adapters/litellm_adapter.py` - LiteLLM unified proxy support
+- VS Code extension - real-time token counter in the status bar
 - Smarter oversized-file handling in `distill fix`
 - More test coverage
 
@@ -345,7 +345,7 @@ Most useful right now:
 
 ## License
 
-MIT — [LICENSE](LICENSE)
+MIT - [LICENSE](LICENSE)
 
 ---
 

@@ -1,5 +1,5 @@
 """
-gemini_adapter.py — Token-optimized adapter for Google Gemini.
+gemini_adapter.py - Token-optimized adapter for Google Gemini.
 
 Features:
 - Accurate token counting via model.count_tokens()
@@ -34,9 +34,9 @@ class GeminiAdapter(BaseLLMAdapter):
     Google Gemini adapter with token optimization.
 
     Model recommendations:
-        gemini-2.0-flash     — fastest, cheapest ($0.10/1M in), 1M ctx
-        gemini-1.5-pro       — best quality ($1.25/1M in), 1M ctx
-        gemini-1.5-flash     — balanced ($0.075/1M in), 1M ctx
+        gemini-2.0-flash     - fastest, cheapest ($0.10/1M in), 1M ctx
+        gemini-1.5-pro       - best quality ($1.25/1M in), 1M ctx
+        gemini-1.5-flash     - balanced ($0.075/1M in), 1M ctx
     """
 
     CONTEXT_LIMITS = {

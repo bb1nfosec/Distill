@@ -1,4 +1,4 @@
-# Claude Code — Token Optimization Deep Guide
+# Claude Code - Token Optimization Deep Guide
 
 ## How Claude Code consumes tokens
 
@@ -7,7 +7,7 @@ Every Claude Code session has this hidden cost structure:
 ```
 Per-session fixed cost:
   System prompt (Anthropic)    ~3,500 tokens  (you can't change this)
-  CLAUDE.md                    varies         (you control this — keep it lean!)
+  CLAUDE.md                    varies         (you control this - keep it lean!)
 
 Per-message variable cost:
   Full conversation history    grows quadratically
@@ -46,7 +46,7 @@ CLAUDE.md lines   Tokens/session   Cost over 100 sessions
 # Rules
 - Batch all edits in one pass. Never partial changes.
 - Code only. No explanations unless asked.
-- Never ask to proceed — just do it.
+- Never ask to proceed - just do it.
 - Read only files relevant to the task.
 
 # Forbidden
@@ -55,7 +55,7 @@ CLAUDE.md lines   Tokens/session   Cost over 100 sessions
 # Research → use subagents. /compact after each feature.
 ```
 
-### Bad CLAUDE.md (bloated — costs forever)
+### Bad CLAUDE.md (bloated - costs forever)
 
 ```markdown
 # Project Overview
@@ -76,9 +76,9 @@ Endpoint 1: POST /api/auth/login
 [2000 more lines of docs that belong in a wiki, not CLAUDE.md]
 ```
 
-## Subdirectory CLAUDE.md files — monorepo strategy
+## Subdirectory CLAUDE.md files - monorepo strategy
 
-In a monorepo, create CLAUDE.md files in subdirectories. They load **only when Claude navigates into that folder** — not on every session.
+In a monorepo, create CLAUDE.md files in subdirectories. They load **only when Claude navigates into that folder** - not on every session.
 
 ```
 my-monorepo/
@@ -93,7 +93,7 @@ my-monorepo/
         └── CLAUDE.md      ← Component library rules
 ```
 
-## Subagents — the most powerful token-saving tool
+## Subagents - the most powerful token-saving tool
 
 When you need to research a codebase, **delegate to a subagent**. Subagents run in a completely separate context window and return only a summary to your main conversation.
 
@@ -117,7 +117,7 @@ When you need to research a codebase, **delegate to a subagent**. Subagents run 
 "Use a subagent to read src/db/ and summarize the schema"
 ```
 
-## /compact — use it strategically
+## /compact - use it strategically
 
 `/compact` summarizes the conversation history, freeing context space.
 
@@ -126,7 +126,7 @@ When you need to research a codebase, **delegate to a subagent**. Subagents run 
 - When Claude starts making mistakes (context degradation)
 - When you see the context indicator climbing past 50%
 
-**How to make it better — add this to CLAUDE.md:**
+**How to make it better - add this to CLAUDE.md:**
 ```markdown
 # When compacting, always preserve:
 # - The full list of files modified in this session
@@ -134,7 +134,7 @@ When you need to research a codebase, **delegate to a subagent**. Subagents run 
 # - Any test commands that were run and their results
 ```
 
-## /btw — quick lookups without context cost
+## /btw - quick lookups without context cost
 
 `/btw` shows an answer in a dismissible overlay that **never enters conversation history**.
 
@@ -153,9 +153,9 @@ These don't cost you anything in subsequent turns.
 | `/compact` | Summarizes history into a compressed form | Between tasks in the same session |
 | `/clear` | Wipes history completely | When starting a completely new task |
 
-`/compact` > `/clear` in most cases — you keep the task state.
+`/compact` > `/clear` in most cases - you keep the task state.
 
-## The batching rule — 60-80% savings alone
+## The batching rule - 60-80% savings alone
 
 Every request re-sends the full conversation. Five small requests cost 5× what one batched request costs.
 
@@ -178,7 +178,7 @@ Cost: each turn re-sends all previous turns.
 ```
 Cost: ~5× cheaper. Same output quality.
 
-## .claudeignore — essential for every project
+## .claudeignore - essential for every project
 
 ```bash
 # Auto-generate for your project:
@@ -194,7 +194,7 @@ dist/, build/        → often 5,000–50,000 tokens
 coverage/            → often 3,000+ tokens
 ```
 
-## Extended thinking — turn it off for simple tasks
+## Extended thinking - turn it off for simple tasks
 
 Claude runs internal reasoning on every request. For simple, well-defined mechanical tasks (rename this variable, fix this typo, add this import), this is pure waste.
 
@@ -216,4 +216,4 @@ During work:
 
 After each feature:
 - [ ] Run `/compact`
-- [ ] Check context indicator — if >60%, consider `/compact` again
+- [ ] Check context indicator - if >60%, consider `/compact` again

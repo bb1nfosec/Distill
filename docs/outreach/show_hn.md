@@ -1,25 +1,25 @@
 # Show HN Submission
 
-**URL to submit:** https://github.com/bb1nfosec/Distill
+**URL to submit:** https://github.com/distill-team/Distill
 
 ---
 
-## Title (pick one — A/B test if possible)
+## Title (pick one - A/B test if possible)
 
 **Option A (most specific, best CTR pattern):**
-> Show HN: I built a CLI that shows which files are burning your Claude/GPT-4 tokens — and the dollar cost
+> Show HN: I built a CLI that shows which files are burning your Claude/GPT-4 tokens - and the dollar cost
 
 **Option B (problem-first framing):**
 > Show HN: LLM token costs grow quadratically. Here's a tool that shows you exactly why and how to fix it
 
 **Option C (number hook):**
-> Show HN: distill — scan your codebase and see which files cost $0.05+ per Claude session
+> Show HN: distill - scan your codebase and see which files cost $0.05+ per Claude session
 
 ---
 
 ## Body text
 
-Token costs aren't linear — they're quadratic. Every LLM re-reads your entire conversation history on every turn. A 20-turn Claude session can cost 120× more than turn 1 because the model ingests all previous history every time.
+Token costs aren't linear - they're quadratic. Every LLM re-reads your entire conversation history on every turn. A 20-turn Claude session can cost 120× more than turn 1 because the model ingests all previous history every time.
 
 Most of that cost is waste: lock files (package-lock.json alone is often 120k tokens = $0.36/session), generated code, tsconfig.tsbuildinfo, XML schemas. Files the LLM should never see.
 
@@ -28,7 +28,7 @@ distill scans your repo and shows you exactly what's burning tokens and what it 
 ```
 distill scan --path ./my-project
 
-  distill — Context Audit
+  distill - Context Audit
   Model         : claude  ($3.00 / 1M input tokens)
   Total tokens  : 1.8M  (938.4% of context)
   Per-session $ : $5.64  ← most of this is waste
@@ -49,7 +49,7 @@ And a CI gate so it never silently bloats again:
 
 ```
 distill check --path . --max-pct 30
-# exits 1 if over budget — works in GitHub Actions
+# exits 1 if over budget - works in GitHub Actions
 ```
 
 Adapters for Claude (with prompt caching), OpenAI, Gemini (1M ctx), and Ollama. Core tools have zero hard dependencies.

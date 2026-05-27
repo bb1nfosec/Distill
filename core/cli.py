@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-cli.py — Unified `distill` command dispatcher.
+cli.py - Unified `distill` command dispatcher.
 
 Usage:
     distill scan    [--path .] [--model claude] [--top 20] [--cost]
@@ -72,7 +72,7 @@ def cmd_analyze(argv):
     if args.fix:
         added = apply_fixes(patterns, path)
         if added:
-            print(f"\033[92m✓ Applied fixes — {added} entries added to .llmignore / .claudeignore\033[0m\n")
+            print(f"\033[92m✓ Applied fixes - {added} entries added to .llmignore / .claudeignore\033[0m\n")
         else:
             print("  Nothing new to add (all entries already present).\n")
 
@@ -144,12 +144,12 @@ COMMANDS = {
     "version":  cmd_version,
 }
 
-HELP = """distill — token optimization toolkit
+HELP = """distill - token optimization toolkit
 
 Commands:
   scan      Scan a directory and report token costs per file
   analyze   Detect waste patterns (lock files, generated code, etc.)
-  check     Budget gate for CI — exits 1 if over context threshold
+  check     Budget gate for CI - exits 1 if over context threshold
   fix       Auto-fix waste: write .llmignore rules, show before/after savings
   generate  Auto-generate .llmignore, CLAUDE.md, and LLM configs
   version   Print version

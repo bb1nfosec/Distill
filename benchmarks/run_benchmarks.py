@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_benchmarks.py — Real benchmarks for distill.
+run_benchmarks.py - Real benchmarks for distill.
 
 Runs against actual directories on disk. No mocks.
 Usage:
@@ -36,7 +36,7 @@ def bench_accuracy():
         import tiktoken
         enc = tiktoken.get_encoding("cl100k_base")
     except ImportError:
-        print("  [skip] tiktoken not installed — run: pip install tiktoken")
+        print("  [skip] tiktoken not installed - run: pip install tiktoken")
         return None
 
     samples = [
@@ -175,16 +175,16 @@ def bench_compaction():
     # Realistic turn pairs: (user_tokens, assistant_tokens)
     # Sizes modelled on actual Claude Code sessions scanning real source files
     turn_sizes = [
-        (80,  420),   # Turn 1 — simple question, short answer
-        (60,  680),   # Turn 2 — ask for edit, code diff returned
-        (40,  820),   # Turn 3 — follow-up fix
-        (90,  1100),  # Turn 4 — add feature, medium response
-        (55,  760),   # Turn 5 — tweak
-        (70,  940),   # Turn 6 — add tests
-        (45,  610),   # Turn 7 — lint fix
-        (80,  1050),  # Turn 8 — refactor
-        (60,  890),   # Turn 9 — review
-        (50,  420),   # Turn 10 — final check
+        (80,  420),   # Turn 1 - simple question, short answer
+        (60,  680),   # Turn 2 - ask for edit, code diff returned
+        (40,  820),   # Turn 3 - follow-up fix
+        (90,  1100),  # Turn 4 - add feature, medium response
+        (55,  760),   # Turn 5 - tweak
+        (70,  940),   # Turn 6 - add tests
+        (45,  610),   # Turn 7 - lint fix
+        (80,  1050),  # Turn 8 - refactor
+        (60,  890),   # Turn 9 - review
+        (50,  420),   # Turn 10 - final check
     ]
 
     cumulative_history = 0
@@ -287,7 +287,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{BOLD}{'═'*65}{NC}")
-    print(f"{BOLD}  distill — benchmark suite{NC}  (real data, no mocks)")
+    print(f"{BOLD}  distill - benchmark suite{NC}  (real data, no mocks)")
     print(f"{BOLD}{'═'*65}{NC}")
 
     acc  = bench_accuracy()

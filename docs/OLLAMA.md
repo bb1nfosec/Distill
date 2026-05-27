@@ -1,4 +1,4 @@
-# Ollama — Local LLM Token Optimization Guide
+# Ollama - Local LLM Token Optimization Guide
 
 ## The most important setting: `num_ctx`
 
@@ -82,7 +82,7 @@ llama3.1:70b   16384      ~50GB
 
 For CPU-only inference, 8k context is a good limit before things get slow.
 
-## `keep_alive` — control RAM usage
+## `keep_alive` - control RAM usage
 
 ```bash
 PARAMETER keep_alive 10m   # Keep model loaded for 10 minutes after last use
@@ -90,7 +90,7 @@ PARAMETER keep_alive 0     # Unload immediately after each request (saves RAM)
 PARAMETER keep_alive -1    # Keep loaded forever
 ```
 
-## Ollama doesn't have /compact — do it manually
+## Ollama doesn't have /compact - do it manually
 
 Ollama models have no built-in session compaction. Use the adapter:
 

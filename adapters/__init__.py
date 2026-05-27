@@ -1,4 +1,4 @@
-"""distill adapters — universal LLM interface."""
+"""distill adapters - universal LLM interface."""
 from .base_adapter import BaseLLMAdapter, CompletionResult, SessionStats, Message
 from .claude_adapter import ClaudeAdapter
 from .openai_adapter import OpenAIAdapter

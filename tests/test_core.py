@@ -1,5 +1,5 @@
 """
-tests/test_core.py — Basic tests for TokenWise core tools.
+tests/test_core.py - Basic tests for TokenWise core tools.
 Run: pytest tests/ -v
 """
 
@@ -202,7 +202,7 @@ class TestCompactQuality:
             adapter._history.append(Message(role="assistant", content="ok"))
         adapter.compact()
         prompt_text = adapter.api_calls[0][0]["content"]
-        # Should contain 1000 x's then ... — not 500
+        # Should contain 1000 x's then ... - not 500
         assert "x" * 1000 in prompt_text
         assert "x" * 1001 not in prompt_text
 

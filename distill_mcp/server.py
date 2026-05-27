@@ -1,4 +1,4 @@
-"""distill MCP server — exposes token scanning and budget gates as Claude tools."""
+"""distill MCP server - exposes token scanning and budget gates as Claude tools."""
 
 import io
 import sys
@@ -28,12 +28,13 @@ def scan_tokens(
 
     Args:
         path: Directory to scan (default: current directory).
-        model: Pricing model — claude, claude-haiku, claude-opus, gpt-4o, gpt-4o-mini, gemini, ollama.
+        model: Pricing model - claude, claude-haiku, claude-opus, gpt-4o, gpt-4o-mini, gemini, ollama.
         top_n: Number of files to show (default 20, sorted by token count).
         extensions: Comma-separated list of extensions to include, e.g. 'py,ts,md'. Empty = all.
     """
     ext_filter = {e.strip().lstrip(".") for e in extensions.split(",") if e.strip()}
-    files = scan_directory(Path(path), model=model)
+    all_files = scan_directory(Path(path), model=model)
+    files = [f for f in all_files if not f.get("skipped")]
     if ext_filter:
         files = [f for f in files if Path(f["path"]).suffix.lstrip(".") in ext_filter]
     files.sort(key=lambda f: f["tokens"], reverse=True)
@@ -45,7 +46,7 @@ def scan_tokens(
     price_per_m = PRICING.get(model, 2.50)
 
     lines = [
-        f"distill scan — {path}",
+        f"distill scan - {path}",
         f"Model     : {model}  (${price_per_m:.2f}/1M tokens)",
         f"Files     : {len(files)}",
         f"Tokens    : {total_tokens:,}  ({pct:.1f}% of {ctx_limit // 1000}k ctx)",
@@ -122,7 +123,7 @@ def generate_llmignore(path: str = ".") -> str:
     """Generate an optimized .llmignore for the project at path.
 
     Detects project type (Node/Python/Go/Rust/etc.) and returns the recommended
-    .llmignore content. Does NOT write to disk — returns the content for review.
+    .llmignore content. Does NOT write to disk - returns the content for review.
 
     Args:
         path: Project root to analyze (default: current directory).
@@ -151,7 +152,7 @@ def fix_context(
         path: Project root to fix (default: current directory).
         model: LLM model for token counting and cost estimates.
         dry_run: If True, show what would change without writing any files.
-        min_severity: Minimum severity level to auto-fix — 'high' (default), 'medium', or 'low'.
+        min_severity: Minimum severity level to auto-fix - 'high' (default), 'medium', or 'low'.
     """
     from core.fix import run_fix
     buf = io.StringIO()

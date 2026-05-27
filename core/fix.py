@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-fix.py — Automatically apply .llmignore rules to eliminate detected waste.
+fix.py - Automatically apply .llmignore rules to eliminate detected waste.
 
 Detects context waste patterns, writes the rules into .llmignore, and prints
 a before/after comparison showing tokens and dollars saved.
@@ -46,20 +46,21 @@ def run_fix(
 
     # Before scan
     before        = scan_directory(path, model, respect_llmignore=True)
-    before_tokens = sum(f["tokens"] for f in before)
-    before_cost   = sum(f["cost_usd"] for f in before)
+    before_active = [f for f in before if not f.get("skipped")]
+    before_tokens = sum(f["tokens"] for f in before_active)
+    before_cost   = sum(f["cost_usd"] for f in before_active)
     before_pct    = before_tokens / ctx_limit * 100
 
     patterns = analyze_directory(path, model)
 
-    print(f"\n{BOLD}  distill fix{NC}  —  {path}")
+    print(f"\n{BOLD}  distill fix{NC}  -  {path}")
     print(f"  {'─'*54}")
     print(f"  Before  : {format_number(before_tokens)} tokens  "
           f"({before_pct:.1f}% ctx)  {format_cost(before_cost)}/session")
 
     in_scope = [p for p in patterns if SEVERITY_RANK.get(p.severity, 99) <= min_rank]
     if not in_scope:
-        print(f"\n  {GREEN}✓ No actionable waste patterns found — context already clean.{NC}\n")
+        print(f"\n  {GREEN}✓ No actionable waste patterns found - context already clean.{NC}\n")
         return 0
 
     existing     = _read_llmignore(path)
@@ -109,8 +110,9 @@ def run_fix(
     _write_llmignore(path, new_lines)
 
     after        = scan_directory(path, model, respect_llmignore=True)
-    after_tokens = sum(f["tokens"] for f in after)
-    after_cost   = sum(f["cost_usd"] for f in after)
+    after_active = [f for f in after if not f.get("skipped")]
+    after_tokens = sum(f["tokens"] for f in after_active)
+    after_cost   = sum(f["cost_usd"] for f in after_active)
     after_pct    = after_tokens / ctx_limit * 100
     saved_tokens = before_tokens - after_tokens
     saved_cost   = before_cost - after_cost
@@ -125,7 +127,7 @@ def run_fix(
 
     print(f"\n  {'─'*54}")
     if dry_run:
-        print(f"  {YELLOW}DRY RUN — no files written{NC}")
+        print(f"  {YELLOW}DRY RUN - no files written{NC}")
         print(f"  Would add {len(added_rules)} rule(s) to .llmignore")
     else:
         print(f"  {GREEN}✓ Written to .llmignore ({len(added_rules)} rule(s) added){NC}")

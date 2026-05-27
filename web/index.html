@@ -137,8 +137,8 @@
   <a href="#" class="nav-logo">⬡ <span>distill</span></a>
   <div class="nav-links">
     <a href="#analyze">Analyze</a>
-    <a href="https://github.com/bb1nfosec/Distill/blob/main/benchmarks/results.md">Benchmarks</a>
-    <a href="https://github.com/bb1nfosec/Distill" class="nav-github">★ GitHub</a>
+    <a href="https://github.com/distill-team/Distill/blob/main/benchmarks/results.md">Benchmarks</a>
+    <a href="https://github.com/distill-team/Distill" class="nav-github">★ GitHub</a>
   </div>
 </nav>
 
@@ -579,7 +579,7 @@ drawQuad();
 
 // ── Copy install command ──────────────────────────────────────────────────────
 function copyInstall() {
-  const cmd = 'git clone https://github.com/bb1nfosec/Distill && cd Distill && pip install -e ".[tiktoken]" && distill scan --path .';
+  const cmd = 'git clone https://github.com/distill-team/Distill && cd Distill && pip install -e ".[tiktoken]" && distill scan --path .';
   navigator.clipboard.writeText(cmd).catch(() => {});
   const btn = document.querySelector(".copy-btn");
   btn.textContent = "copied!";

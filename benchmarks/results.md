@@ -5,7 +5,7 @@ Machine: Linux 6.8.0 / Python 3.12
 tiktoken: 0.13.0 (cl100k_base)  
 Distill commit: `07370a0`
 
-All results from real files on disk — no mocks, no synthetic data.
+All results from real files on disk - no mocks, no synthetic data.
 
 ---
 
@@ -57,7 +57,7 @@ by `distill generate_config`.
 | TradingAgents           |     85,412 |  42.7% |     85,294 |  42.6% |        118 |    0.1% |
 | vaathi-main (Next.js)   | 1,876,732 | 938.4% | 1,315,353 | 657.7% |    561,379 | **29.9%** |
 
-**vaathi-main breakdown — top waste eliminated:**
+**vaathi-main breakdown - top waste eliminated:**
 
 | File | Tokens removed |
 |---|---:|
@@ -70,7 +70,7 @@ by `distill generate_config`.
 | **Total removed**                            | **561,379** |
 
 > Note: vaathi-main is still 657% over context after ignoring, because the project
-> contains large AI-skill reference files. That is an honest result — some projects
+> contains large AI-skill reference files. That is an honest result - some projects
 > simply require subagents rather than a single-context read.
 
 ---
@@ -95,8 +95,8 @@ Compaction applied after turn 4; history compressed to ~18% of its size.
 
 | | Tokens |
 |---|---:|
-| Total input — 10 turns without compaction | 37,760 |
-| Total input — 10 turns with compaction    | 21,572 |
+| Total input - 10 turns without compaction | 37,760 |
+| Total input - 10 turns with compaction    | 21,572 |
 | **Saved**                                 | **16,188 (42.9%)** |
 
 ---
@@ -104,7 +104,7 @@ Compaction applied after turn 4; history compressed to ~18% of its size.
 ## Reproducing
 
 ```bash
-git clone https://github.com/bb1nfosec/distill
+git clone https://github.com/distill-team/distill
 cd distill
 pip install tiktoken
 python3 benchmarks/run_benchmarks.py

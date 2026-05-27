@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# LLM Token Optimizer — setup.sh
+# LLM Token Optimizer - setup.sh
 # Run: bash setup.sh [--model claude|openai|gemini|ollama|all]
 # ============================================================
 set -e
@@ -83,7 +83,7 @@ echo ""
 generate_llmignore() {
   local outfile="$TARGET_DIR/.llmignore"
   cat > "$outfile" << 'EOF'
-# .llmignore — files your LLM will skip
+# .llmignore - files your LLM will skip
 # Works with Claude Code (.claudeignore), and any custom LLM tooling
 
 # Dependencies
@@ -203,7 +203,7 @@ generate_claude_config() {
 # Response rules
 - Batch all related edits into one pass. Never make partial changes and ask to continue.
 - No explanatory prose unless asked. Code + inline comments only.
-- Never ask "shall I proceed?" — just execute.
+- Never ask "shall I proceed?" - just execute.
 - Read only files directly relevant to the task.
 - Keep responses terse. No summaries of what you just did.
 
@@ -215,7 +215,7 @@ generate_claude_config() {
 
 # Session hygiene
 - Run /compact after completing each feature or work phase.
-- Use /btw for throwaway lookups — keeps them out of context history.
+- Use /btw for throwaway lookups - keeps them out of context history.
 EOF
   log "Generated CLAUDE.md (~$(wc -l < "$outfile") lines)"
 
@@ -235,13 +235,13 @@ You are a senior engineer assistant. Follow these rules strictly:
 **Response rules:**
 - Be terse. No preamble, no summaries of what you did.
 - Batch all edits. Never make partial changes and ask to continue.
-- Code blocks only — no prose explanation unless asked.
+- Code blocks only - no prose explanation unless asked.
 - Never ask "shall I proceed?" Just do it.
 
 **Context rules:**
 - Only reference files/code explicitly provided in this conversation.
 - Do not invent file paths, function names, or imports that weren't shown.
-- If unsure what a file contains, ask for its content — don't assume.
+- If unsure what a file contains, ask for its content - don't assume.
 
 **Project: $PROJECT_TYPE ($PKG_MANAGER)**
 EOF
@@ -271,12 +271,12 @@ EOF
 generate_ollama_config() {
   mkdir -p "$TARGET_DIR/.llm"
   cat > "$TARGET_DIR/.llm/Modelfile" << 'EOF'
-# Ollama Modelfile — token-optimized for coding
+# Ollama Modelfile - token-optimized for coding
 # Usage: ollama create mydev -f .llm/Modelfile
 
 FROM llama3.2
 
-# Keep context tight — increase only if needed
+# Keep context tight - increase only if needed
 PARAMETER num_ctx 8192
 
 # Reduce verbosity
@@ -291,7 +291,7 @@ You are a terse, precise coding assistant.
 - Respond with code only unless explanation is asked.
 - Batch all edits in one response.
 - No preamble, no summaries.
-- Never ask to proceed — just do it.
+- Never ask to proceed - just do it.
 """
 EOF
   log "Generated .llm/Modelfile (Ollama)"
@@ -300,9 +300,9 @@ EOF
 # Ollama Token Optimization Tips
 
 ## Context window
-- Default context (2k) is tiny — always set `num_ctx` in Modelfile
+- Default context (2k) is tiny - always set `num_ctx` in Modelfile
 - 8k is good for most tasks; 16k for large codebases
-- More context = more RAM — tune for your machine
+- More context = more RAM - tune for your machine
 
 ## Model selection by task
 | Task | Best model | Context needed |
@@ -355,10 +355,10 @@ echo ""
 echo -e "${BOLD}Checking tooling...${NC}"
 if command -v python3 &>/dev/null; then
   python3 -c "import tiktoken" 2>/dev/null && log "tiktoken available (accurate token counts)" \
-    || warn "tiktoken not installed — run: pip install tiktoken  (for accurate counts)"
+    || warn "tiktoken not installed - run: pip install tiktoken  (for accurate counts)"
   log "python3 available"
 else
-  warn "python3 not found — token counter won't work. Install Python 3.8+"
+  warn "python3 not found - token counter won't work. Install Python 3.8+"
 fi
 
 # ── Summary ──────────────────────────────────────────────────

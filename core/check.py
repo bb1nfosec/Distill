@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-check.py — Budget gate for CI pipelines.
+check.py - Budget gate for CI pipelines.
 
 Exits 0 if the repo is within budget, 1 if over.
 Use in CI to prevent context bloat from landing.
@@ -99,7 +99,7 @@ def run_check(
     status_icon  = f"{RED}✗ FAIL{NC}" if failed else f"{GREEN}✓ PASS{NC}"
     budget_color = RED if over_budget else (YELLOW if pct > max_pct * 0.8 else GREEN)
 
-    print(f"\n{BOLD}  distill check{NC}  —  {path}")
+    print(f"\n{BOLD}  distill check{NC}  -  {path}")
     print(f"  {'─'*50}")
     print(f"  Status        : {status_icon}")
     print(f"  Model         : {model}")
@@ -127,7 +127,7 @@ def run_check(
         for p in patterns:
             c = RED if p.severity == "high" else (YELLOW if p.severity == "medium" else "")
             nc = NC if c else ""
-            print(f"    {c}[{p.severity.upper()}]{nc} {p.name}  — {format_number(p.tokens_wasted)} tokens wasted")
+            print(f"    {c}[{p.severity.upper()}]{nc} {p.name}  - {format_number(p.tokens_wasted)} tokens wasted")
             print(f"           Fix: {p.fix}")
         if has_waste:
             print(f"\n  {RED}Failing on {len(high_waste)} HIGH severity waste pattern(s){NC} (--fail-on-waste)")
@@ -148,7 +148,7 @@ def main():
     except Exception:
         pass
     parser = argparse.ArgumentParser(
-        description="Token budget gate for CI — exits 1 if over budget"
+        description="Token budget gate for CI - exits 1 if over budget"
     )
     parser.add_argument("--path",          "-p", default=".",        help="Path to scan (default: .)")
     parser.add_argument("--model",         "-m", default="claude",   help="Model family")

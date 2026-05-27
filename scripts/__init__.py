@@ -1,1 +1,1 @@
-"""distill scripts — config generation and usage examples."""
+"""distill scripts - config generation and usage examples."""

@@ -1,5 +1,5 @@
 """
-claude_adapter.py — Token-optimized adapter for Anthropic Claude.
+claude_adapter.py - Token-optimized adapter for Anthropic Claude.
 
 Features:
 - Prompt caching (up to 90% cost reduction on repeated context)
@@ -76,7 +76,7 @@ class ClaudeAdapter(BaseLLMAdapter):
             import core.token_counter as _tc
             if not _tc._TIKTOKEN_WARNING_SHOWN:
                 warnings.warn(
-                    "tiktoken not installed — token counts are approximate "
+                    "tiktoken not installed - token counts are approximate "
                     "(character-based estimation). Install tiktoken for accurate counts: "
                     "pip install tiktoken",
                     stacklevel=2,
@@ -136,7 +136,7 @@ class ClaudeAdapter(BaseLLMAdapter):
     def run_subagent(self, task: str, context_files: list[str] = None, model: str = None) -> str:
         """
         Run a research task in a separate context window (subagent pattern).
-        Returns only a summary — keeps your main conversation clean.
+        Returns only a summary - keeps your main conversation clean.
 
         Model resolution order:
           1. call-level ``model`` parameter
@@ -163,7 +163,7 @@ class ClaudeAdapter(BaseLLMAdapter):
 
         resolved_model = model or self.subagent_model or "claude-haiku-4-5"
 
-        # Fresh subagent — no history
+        # Fresh subagent - no history
         sub = ClaudeAdapter(
             model=resolved_model,
             system_prompt=subagent_system,
@@ -173,7 +173,7 @@ class ClaudeAdapter(BaseLLMAdapter):
         result = sub.chat("\n".join(content_parts))
         
         tokens_used = sub.stats.total_tokens
-        print(f"[Subagent] Research complete — {tokens_used:,} tokens used in separate context")
+        print(f"[Subagent] Research complete - {tokens_used:,} tokens used in separate context")
         return result
 
     @staticmethod
@@ -199,11 +199,11 @@ class ClaudeAdapter(BaseLLMAdapter):
             "# Response rules",
             "- Batch all related edits into one pass. Never make partial changes and ask to continue.",
             "- No explanatory prose unless asked. Code + inline comments only.",
-            "- Never ask 'shall I proceed?' — just execute.",
+            "- Never ask 'shall I proceed?' - just execute.",
             "- Read only files directly relevant to the task.",
             "- Keep responses terse. No summaries of what you just did.",
             "",
-            "# Forbidden paths — never read these",
+            "# Forbidden paths - never read these",
         ]
         for d in forbidden:
             lines.append(f"- {d}/")
@@ -214,7 +214,7 @@ class ClaudeAdapter(BaseLLMAdapter):
         lines.append("")
         lines.append("# Session")
         lines.append("- Run /compact after completing each feature or work phase.")
-        lines.append("- Use /btw for quick lookups — keeps them out of history.")
+        lines.append("- Use /btw for quick lookups - keeps them out of history.")
 
         if custom_notes:
             lines.append("")
@@ -225,6 +225,6 @@ class ClaudeAdapter(BaseLLMAdapter):
         
         # Warn if over limit
         if len(lines) > max_lines:
-            print(f"[Warning] CLAUDE.md is {len(lines)} lines — target under {max_lines}")
+            print(f"[Warning] CLAUDE.md is {len(lines)} lines - target under {max_lines}")
         
         return result

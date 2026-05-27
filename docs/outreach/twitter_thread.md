@@ -1,10 +1,10 @@
 # Twitter/X Thread
 
-Post as a thread. Hook tweet must stand alone — people share the first tweet.
+Post as a thread. Hook tweet must stand alone - people share the first tweet.
 
 ---
 
-**Tweet 1 — Hook (must stop the scroll)**
+**Tweet 1 - Hook (must stop the scroll)**
 
 > Most developers think LLM costs are linear.
 >
@@ -14,7 +14,7 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 2 — The insight**
+**Tweet 2 - The insight**
 
 > Every LLM re-reads your ENTIRE conversation on every single turn.
 >
@@ -27,7 +27,7 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 3 — The real culprit**
+**Tweet 3 - The real culprit**
 
 > I scanned a real Next.js project with distill:
 >
@@ -41,7 +41,7 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 4 — The fix (30 seconds)**
+**Tweet 4 - The fix (30 seconds)**
 
 > distill generates the right .llmignore in one command:
 >
@@ -54,7 +54,7 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 5 — CI gate**
+**Tweet 5 - CI gate**
 
 > You can also wire it into CI so it never silently bloats again:
 >
@@ -65,7 +65,7 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 6 — The compaction insight**
+**Tweet 6 - The compaction insight**
 
 > One more thing most people miss:
 >
@@ -79,16 +79,16 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 
 ---
 
-**Tweet 7 — CTA**
+**Tweet 7 - CTA**
 
-> Built distill — open source, zero hard dependencies, works with
+> Built distill - open source, zero hard dependencies, works with
 > Claude / GPT-4o / Gemini (1M ctx) / Ollama.
 >
 > Scan your repo in 30 seconds:
 > pip install -e ".[tiktoken]" && distill scan --path .
 >
-> → github.com/bb1nfosec/Distill
-> → Try in browser: bb1nfosec.github.io/Distill
+> → github.com/distill-team/Distill
+> → Try in browser: distill-team.github.io/Distill
 
 ---
 
@@ -99,5 +99,5 @@ Post as a thread. Hook tweet must stand alone — people share the first tweet.
 - Best time: Tuesday–Thursday 9–11am ET or 6–8pm ET.
 - Tag @AnthropicAI on tweet 4 (they retweet Claude tooling regularly).
 - Reply to your own thread with "repo + try online" link for easy saving.
-- Don't post all 7 back-to-back — X algorithm throttles threads if posted too fast.
+- Don't post all 7 back-to-back - X algorithm throttles threads if posted too fast.
   Post 1-3 immediately, 4-5 after 5 min, 6-7 after another 5 min.

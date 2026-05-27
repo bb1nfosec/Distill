@@ -4,15 +4,15 @@ Thanks for helping make LLM sessions cheaper for everyone.
 
 ## Priority contributions
 
-- `adapters/gemini_adapter.py` — Google Gemini API adapter
-- `adapters/litellm_adapter.py` — LiteLLM unified proxy
-- `tests/` — unit tests for core tools and adapters
-- VS Code extension — real-time token counter in status bar
+- `adapters/gemini_adapter.py` - Google Gemini API adapter
+- `adapters/litellm_adapter.py` - LiteLLM unified proxy
+- `tests/` - unit tests for core tools and adapters
+- VS Code extension - real-time token counter in status bar
 
 ## Setup
 
 ```bash
-git clone https://github.com/bb1nfosec/distill
+git clone https://github.com/distill-team/distill
 cd distill
 pip install -r requirements.txt
 python3 core/token_counter.py --path .   # verify it works
@@ -21,7 +21,7 @@ python3 core/token_counter.py --path .   # verify it works
 ## Adding a new LLM adapter
 
 1. Create `adapters/your_adapter.py`
-2. Extend `BaseLLMAdapter` — implement `count_tokens()` and `_call_api()`
+2. Extend `BaseLLMAdapter` - implement `count_tokens()` and `_call_api()`
 3. Add to `scripts/generate_config.py` detection and config generation
 4. Add to `setup.sh` model selection
 5. Document in `docs/YOUR_LLM.md`

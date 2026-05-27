@@ -1,1 +1,1 @@
-"""distill core — token counting, cost analysis, and CI budget gates."""
+"""distill core - token counting, cost analysis, and CI budget gates."""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_config.py — Auto-detect project type and generate optimized LLM configs.
+generate_config.py - Auto-detect project type and generate optimized LLM configs.
 
 Usage:
     python3 scripts/generate_config.py --output ./my-project
@@ -33,7 +33,10 @@ def detect_project(path: Path) -> dict:
     # Language / framework detection
     if "package.json" in files:
         info["language"] = "javascript/typescript"
-        pkg = json.loads((path / "package.json").read_text())
+        try:
+            pkg = json.loads((path / "package.json").read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pkg = {}
         deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
 
         if "next" in deps:
@@ -144,11 +147,11 @@ def generate_claude_md(info: dict, custom_notes: str = "") -> str:
         "# Response rules",
         "- Batch all related edits into one pass.",
         "- No explanations unless asked. Code only.",
-        "- Never ask 'shall I proceed?' — just execute.",
+        "- Never ask 'shall I proceed?' - just execute.",
         "- Read only files relevant to the current task.",
         "- Terse responses. No summaries of what you did.",
         "",
-        "# Forbidden — never read",
+        "# Forbidden - never read",
     ]
     for d in info["forbidden_dirs"]:
         lines.append(f"- {d}/")
@@ -166,7 +169,7 @@ def generate_claude_md(info: dict, custom_notes: str = "") -> str:
 
 
 def generate_llmignore(info: dict) -> str:
-    base = """# .llmignore — skip these paths in all LLM tool calls
+    base = """# .llmignore - skip these paths in all LLM tool calls
 # Works as .claudeignore for Claude Code
 
 # Dependencies
@@ -248,7 +251,7 @@ def generate_openai_system(info: dict) -> str:
 Rules:
 - Code only, no prose unless explicitly asked.
 - Batch all edits in one response.
-- Never ask for confirmation — just execute.
+- Never ask for confirmation - just execute.
 - Reference only code shown in this conversation.
 - Keep responses as short as possible.
 

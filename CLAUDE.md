@@ -6,11 +6,11 @@
 # Response rules
 - Batch all related edits into one pass.
 - No explanations unless asked. Code only.
-- Never ask 'shall I proceed?' — just execute.
+- Never ask 'shall I proceed?' - just execute.
 - Read only files relevant to the current task.
 - Terse responses. No summaries of what you did.
 
-# Forbidden — never read
+# Forbidden - never read
 - node_modules/
 - .git/
 - dist/

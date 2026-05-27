@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-example_usage.py — Shows how to use LLM Token Optimizer with each provider.
+example_usage.py - Shows how to use LLM Token Optimizer with each provider.
 
 Run: python3 scripts/example_usage.py --provider claude
 """
@@ -62,7 +62,7 @@ def example_ollama():
 
     llm = OllamaAdapter(
         model="llama3.2",
-        num_ctx=8192,      # Always set this — default 2048 is too small
+        num_ctx=8192,      # Always set this - default 2048 is too small
         temperature=0.2,   # Low temp for deterministic code
     )
 
