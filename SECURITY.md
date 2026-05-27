@@ -10,7 +10,7 @@
 
 **Do not open a public issue for security vulnerabilities.**
 
-Email **vickytestssec@gmail.com** with the subject line `[SECURITY] distill — <short description>`.
+Contact the project maintainers with the subject line `[SECURITY] distill — <short description>`.
 
 Include:
 - A description of the vulnerability and its impact

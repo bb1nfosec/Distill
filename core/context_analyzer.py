@@ -11,7 +11,6 @@ Usage:
 """
 
 import os
-import re
 import sys
 import json
 import argparse
@@ -43,11 +42,10 @@ def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
     ignored_files = scan_directory(path, model, respect_llmignore=True)
     ignored_paths = {f["path"] for f in ignored_files}
     
-    # Pattern 1: Lock files
-    lock_files = [f for f in all_files if any(
-        x in f["path"] for x in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml",
-                                   "bun.lockb", "Gemfile.lock", "poetry.lock", "Cargo.lock"]
-    )]
+    # Pattern 1: Lock files (exact filename match via Path.name)
+    _lock_names = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+                   "bun.lockb", "Gemfile.lock", "poetry.lock", "Cargo.lock"}
+    lock_files = [f for f in all_files if Path(f["path"]).name in _lock_names]
     if lock_files:
         total = sum(f["tokens"] for f in lock_files)
         patterns.append(WastePattern(
@@ -60,11 +58,20 @@ def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
             llmignore_entries=["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Gemfile.lock", "poetry.lock", "Cargo.lock"],
         ))
 
-    # Pattern 2: Generated/built files not ignored
-    generated = [f for f in all_files if f["path"] not in ignored_paths and any(
-        x in f["path"] for x in ["/dist/", "/build/", "/out/", ".min.js", ".min.css",
-                                   "/generated/", ".bundle.js", "__snapshots__"]
-    )]
+    # Pattern 2: Generated/built files not ignored (component-level matching)
+    _generated_dirs = {"dist", "build", "out", "generated"}
+    _generated_exts = {".min.js", ".min.css", ".bundle.js"}
+    def _is_generated(fpath: str) -> bool:
+        parts = Path(fpath.replace("\\", "/")).parts
+        name = parts[-1] if parts else ""
+        if any(d in parts for d in _generated_dirs):
+            return True
+        if "__snapshots__" in parts:
+            return True
+        if any(name.endswith(ext) for ext in _generated_exts):
+            return True
+        return False
+    generated = [f for f in all_files if f["path"] not in ignored_paths and _is_generated(f["path"])]
     if generated:
         total = sum(f["tokens"] for f in generated)
         patterns.append(WastePattern(
@@ -105,7 +112,9 @@ def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
         ))
 
     # Pattern 5: Log files
-    logs = [f for f in all_files if f["path"].endswith(".log") or "/logs/" in f["path"]]
+    logs = [f for f in all_files
+            if f["path"].endswith(".log")
+            or "logs" in Path(f["path"].replace("\\", "/")).parts]
     if logs:
         total = sum(f["tokens"] for f in logs)
         patterns.append(WastePattern(
@@ -119,7 +128,7 @@ def analyze_directory(path: Path, model: str = "claude") -> list[WastePattern]:
         ))
 
     # Pattern 6: Check CLAUDE.md / system prompt size
-    for config_name in ["CLAUDE.md", "CLAUDE.md", ".cursorrules", "AGENTS.md"]:
+    for config_name in ["CLAUDE.md", ".cursorrules", "AGENTS.md"]:
         config_path = path / config_name
         if config_path.exists():
             with open(config_path, encoding="utf-8", errors="ignore") as f:
@@ -227,7 +236,7 @@ def apply_fixes(patterns: list[WastePattern], project_path: Path) -> int:
 
         block = "\n# Added by distill analyze --fix\n" + "\n".join(new_entries) + "\n"
         ignore_path.write_text(header + block, encoding='utf-8')
-        total_added = len(new_entries)
+        total_added += len(new_entries)
 
     return total_added
 
@@ -294,7 +303,25 @@ def main():
         if args.json:
             print(json.dumps(results, indent=2))
         else:
-            print(json.dumps(results, indent=2))
+            BOLD = "\033[1m"; NC = "\033[0m"; YELLOW = "\033[93m"; GREEN = "\033[92m"
+            print(f"\n{BOLD}Session Analysis{NC}  —  {args.session}")
+            print(f"  Turns        : {results['total_turns']}")
+            print(f"  Total tokens : {results['total_tokens']:,}")
+            for role, tok in results["by_role"].items():
+                print(f"    {role:<12}: {tok:,}")
+            if results["largest_messages"]:
+                print(f"\n  {BOLD}Largest messages:{NC}")
+                for m in results["largest_messages"][:5]:
+                    print(f"    [{m['index']}] {m['role']:<10} {m['tokens']:>7,} tokens  {m['preview'][:60]}")
+            if results["repeated_content"]:
+                print(f"\n  {YELLOW}Repeated content:{NC}")
+                for r in results["repeated_content"]:
+                    print(f"    {r}")
+            if results["recommendations"]:
+                print(f"\n  {GREEN}Recommendations:{NC}")
+                for r in results["recommendations"]:
+                    print(f"    {r}")
+            print()
         return
 
     path = Path(args.path).resolve()

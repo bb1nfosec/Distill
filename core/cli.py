@@ -26,12 +26,15 @@ def cmd_scan(argv):
     p.add_argument("--top",      "-t", type=int, default=20)
     p.add_argument("--cost",     "-c", action="store_true")
     p.add_argument("--no-ignore",      action="store_true")
+    p.add_argument("--max-file-size", type=int, default=500_000,
+                   help="Max file size in bytes before skipping (default: 500000)")
     p.add_argument("--json",           action="store_true")
     args = p.parse_args(argv)
 
     path = Path(args.path).resolve()
     print(f"Scanning {path}...", file=sys.stderr)
-    results = scan_directory(path, args.model, respect_llmignore=not args.no_ignore)
+    results = scan_directory(path, args.model, respect_llmignore=not args.no_ignore,
+                             max_file_size=args.max_file_size)
 
     if args.json:
         import json
@@ -83,16 +86,25 @@ def cmd_check(argv):
     p.add_argument("--model",         "-m", default="claude")
     p.add_argument("--max-pct",       "-x", type=float, default=30.0)
     p.add_argument("--fail-on-waste",       action="store_true")
+    p.add_argument("--strict",              action="store_true",
+                   help="Error if tiktoken is not installed")
+    p.add_argument("--overhead-pct",        type=float, default=0,
+                   help="Estimated conversation overhead %% (default: 0)")
+    p.add_argument("--overhead-fixed",      type=int, default=0,
+                   help="Fixed token overhead for system prompt/framing (default: 0)")
     p.add_argument("--json",                action="store_true")
     args = p.parse_args(argv)
 
     path = Path(args.path).resolve()
     return run_check(
-        path          = path,
-        model         = args.model,
-        max_pct       = args.max_pct,
-        fail_on_waste = args.fail_on_waste,
-        output_json   = args.json,
+        path           = path,
+        model          = args.model,
+        max_pct        = args.max_pct,
+        fail_on_waste  = args.fail_on_waste,
+        output_json    = args.json,
+        strict         = args.strict,
+        overhead_pct   = args.overhead_pct,
+        overhead_fixed = args.overhead_fixed,
     )
 
 

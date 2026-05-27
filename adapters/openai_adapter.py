@@ -58,10 +58,14 @@ class OpenAIAdapter(BaseLLMAdapter):
         max_tokens: int = 4096,
         api_key: str = None,
         base_url: str = None,  # For OpenAI-compatible APIs (LiteLLM, etc.)
+        lean_mode: bool = True,
         **kwargs
     ):
         context_limit = self.CONTEXT_LIMITS.get(model, 128_000)
-        full_system = self.LEAN_SYSTEM_PREFIX + system_prompt if system_prompt else self.LEAN_SYSTEM_PREFIX
+        if lean_mode:
+            full_system = self.LEAN_SYSTEM_PREFIX + system_prompt if system_prompt else self.LEAN_SYSTEM_PREFIX
+        else:
+            full_system = system_prompt
         super().__init__(model=model, system_prompt=full_system.strip(),
                          max_tokens=max_tokens, max_context_tokens=context_limit, **kwargs)
 
@@ -78,6 +82,18 @@ class OpenAIAdapter(BaseLLMAdapter):
             import tiktoken
             enc = tiktoken.encoding_for_model(self.model)
             return len(enc.encode(text))
+        except ImportError:
+            import warnings
+            import core.token_counter as _tc
+            if not _tc._TIKTOKEN_WARNING_SHOWN:
+                warnings.warn(
+                    "tiktoken not installed — token counts are approximate "
+                    "(character-based estimation). Install tiktoken for accurate counts: "
+                    "pip install tiktoken",
+                    stacklevel=2,
+                )
+                _tc._TIKTOKEN_WARNING_SHOWN = True
+            return max(1, len(text) // 4)
         except Exception:
             return max(1, len(text) // 4)
 

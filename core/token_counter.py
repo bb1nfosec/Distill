@@ -13,7 +13,8 @@ import os
 import sys
 import argparse
 import fnmatch
-from pathlib import Path
+import warnings
+from pathlib import Path, PurePosixPath
 
 MODEL_RATIOS = {
     "claude":  4.2,
@@ -76,13 +77,44 @@ SKIP_DIRS = {
 }
 
 
+def _matches_path_component(pattern: str, rel_path: str) -> bool:
+    """Check if pattern matches as a complete path component (directory or filename).
+
+    ``"dist"`` matches ``dist/foo.js`` but NOT ``distribution/config.py``.
+    Uses ``PurePosixPath.parts`` for reliable component-level matching.
+    """
+    parts = PurePosixPath(rel_path.replace("\\", "/")).parts
+    return pattern in parts
+
+
+def is_tiktoken_available() -> bool:
+    """Return True if tiktoken is installed and token counts are accurate."""
+    try:
+        import tiktoken  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+_TIKTOKEN_WARNING_SHOWN = False
+
+
 def estimate_tokens(text: str, model: str = "generic") -> int:
+    global _TIKTOKEN_WARNING_SHOWN
     ratio = MODEL_RATIOS.get(model, 4.0)
     try:
         import tiktoken
         enc = tiktoken.get_encoding("cl100k_base")
         return len(enc.encode(text))
     except ImportError:
+        if not _TIKTOKEN_WARNING_SHOWN:
+            warnings.warn(
+                "tiktoken not installed — token counts are approximate "
+                "(character-based estimation). Install tiktoken for accurate counts: "
+                "pip install tiktoken",
+                stacklevel=2,
+            )
+            _TIKTOKEN_WARNING_SHOWN = True
         return max(1, int(len(text) / ratio))
 
 
@@ -95,13 +127,15 @@ def estimate_cost(tokens: int, model: str) -> float:
 def format_cost(usd: float) -> str:
     if usd == 0:
         return "$0.000 (local)"
-    if usd < 0.001:
+    if usd < 0.01:
         return f"${usd:.4f}"
-    return f"${usd:.4f}"
+    return f"${usd:.2f}"
 
 
-def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> list[dict]:
+def scan_directory(path: Path, model: str, respect_llmignore: bool = True,
+                   max_file_size: int = 500_000) -> list[dict]:
     ignore_patterns = set()
+    negation_patterns = set()
 
     if respect_llmignore:
         for ignore_file in [".llmignore", ".claudeignore", ".gitignore"]:
@@ -111,7 +145,28 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith("#"):
-                            ignore_patterns.add(line.rstrip("/"))
+                            if line.startswith("!"):
+                                negation_patterns.add(line[1:].rstrip("/"))
+                            else:
+                                ignore_patterns.add(line.rstrip("/"))
+
+    def _is_negated(fname: str, rel_str: str) -> bool:
+        """Check if a file is un-ignored by a negation pattern."""
+        for neg in negation_patterns:
+            if (fname == neg
+                    or fnmatch.fnmatch(fname, neg)
+                    or fnmatch.fnmatch(rel_str, neg)
+                    or _matches_path_component(neg, rel_str)):
+                return True
+        return False
+
+    def _dir_has_negation(dirname: str) -> bool:
+        """Check if any negation pattern references files inside this directory."""
+        for neg in negation_patterns:
+            # e.g. negation "dist/important.js" should keep "dist" from being pruned
+            if neg.startswith(dirname + "/") or _matches_path_component(dirname, neg):
+                return True
+        return False
 
     results = []
     for root, dirs, files in os.walk(path):
@@ -119,11 +174,17 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
 
         dirs[:] = [
             d for d in dirs
-            if d not in SKIP_DIRS
+            if (
+                d not in SKIP_DIRS
+                or _dir_has_negation(d)
+            )
             and not d.startswith(".")
-            and not any(
-                d == p or fnmatch.fnmatch(d, p)
-                for p in ignore_patterns
+            and (
+                not any(
+                    d == p or fnmatch.fnmatch(d, p)
+                    for p in ignore_patterns
+                )
+                or _dir_has_negation(d)
             )
         ]
 
@@ -135,20 +196,40 @@ def scan_directory(path: Path, model: str, respect_llmignore: bool = True) -> li
                 continue
 
             skip = False
-            rel_str = str(rel_path)
+            rel_str = str(rel_path).replace("\\", "/")
+
+            # Check if file is inside a SKIP_DIRS directory kept alive by negation
+            for skip_dir in SKIP_DIRS:
+                if _matches_path_component(skip_dir, rel_str):
+                    skip = True
+                    break
+
             for pattern in ignore_patterns:
-                if (pattern in rel_str
+                if (_matches_path_component(pattern, rel_str)
                         or fname == pattern
                         or fnmatch.fnmatch(fname, pattern)
                         or fnmatch.fnmatch(rel_str, pattern)):
                     skip = True
                     break
+            if skip and _is_negated(fname, rel_str):
+                skip = False
             if skip:
                 continue
 
             try:
                 size = fpath.stat().st_size
-                if size == 0 or size > 500_000:
+                if size == 0:
+                    continue
+                if size > max_file_size:
+                    results.append({
+                        "path": str(rel_path),
+                        "tokens": 0,
+                        "lines": 0,
+                        "size_kb": round(size / 1024, 1),
+                        "cost_usd": 0.0,
+                        "skipped": True,
+                        "skip_reason": f"File size {round(size/1024, 1)}KB exceeds limit {round(max_file_size/1024, 1)}KB",
+                    })
                     continue
                 with open(fpath, encoding="utf-8", errors="ignore") as f:
                     content = f.read()
@@ -177,9 +258,11 @@ def format_number(n: int) -> str:
 
 def print_report(results: list[dict], model: str, top_n: int = 20,
                  context_limit: int = None, show_cost: bool = True):
-    total_tokens = sum(r["tokens"] for r in results)
-    total_cost   = sum(r["cost_usd"] for r in results)
-    total_files  = len(results)
+    active_results = [r for r in results if not r.get("skipped")]
+    skipped_results = [r for r in results if r.get("skipped")]
+    total_tokens = sum(r["tokens"] for r in active_results)
+    total_cost   = sum(r["cost_usd"] for r in active_results)
+    total_files  = len(active_results)
     limit        = context_limit or CONTEXT_LIMITS.get(model, 128_000)
     pct          = (total_tokens / limit) * 100
 
@@ -223,36 +306,52 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
         sep += f"  {'─'*8}"
     print(sep)
 
-    for r in results[:top_n]:
+    for r in active_results[:top_n]:
         path_str = r["path"][:47]
         line = f"  {path_str:<48} {format_number(r['tokens']):>8}  {r['lines']:>6}  {r['size_kb']:>6}KB"
         if show_cost:
             line += f"  {format_cost(r['cost_usd']):>8}"
         print(line)
 
-    if len(results) > top_n:
-        remaining_tok  = sum(r["tokens"]   for r in results[top_n:])
-        remaining_cost = sum(r["cost_usd"] for r in results[top_n:])
-        line = f"  {'... and ' + str(len(results)-top_n) + ' more files':<48} {format_number(remaining_tok):>8}"
+    if len(active_results) > top_n:
+        remaining_tok  = sum(r["tokens"]   for r in active_results[top_n:])
+        remaining_cost = sum(r["cost_usd"] for r in active_results[top_n:])
+        line = f"  {'... and ' + str(len(active_results)-top_n) + ' more files':<48} {format_number(remaining_tok):>8}"
         if show_cost:
             line += f"  {'':>8}  {'':>6}  {'':>7}  {format_cost(remaining_cost):>8}"
         print(line)
 
+    if skipped_results:
+        print(f"\n  {YELLOW}⚠  {len(skipped_results)} file(s) skipped (over size limit):{NC}")
+        for sr in skipped_results[:5]:
+            print(f"      {sr['path']}  ({sr['size_kb']}KB — {sr['skip_reason']})")
+        if len(skipped_results) > 5:
+            print(f"      ... and {len(skipped_results) - 5} more")
+
     print(f"\n  {BOLD}Recommendations:{NC}")
 
-    large_files = [r for r in results if r["tokens"] > 5000]
+    large_files = [r for r in active_results if r["tokens"] > 5000]
     if large_files:
         print(f"  {YELLOW}→{NC} {len(large_files)} files over 5k tokens — split or ignore:")
         for f in large_files[:3]:
             print(f"      {f['path']} ({format_number(f['tokens'])} tokens, {format_cost(f['cost_usd'])})")
 
-    lock_files = [r for r in results if any(x in r["path"] for x in ["lock", "Lock"])]
+    _lock_names = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+                   "bun.lockb", "Gemfile.lock", "poetry.lock", "Cargo.lock"}
+    lock_files = [r for r in active_results if Path(r["path"]).name in _lock_names]
     if lock_files:
         tot = sum(r["tokens"] for r in lock_files)
         cost = sum(r["cost_usd"] for r in lock_files)
         print(f"  {RED}→{NC} Lock files: {format_number(tot)} tokens ({format_cost(cost)}) — add to .llmignore")
 
-    generated = [r for r in results if any(x in r["path"] for x in ["generated", "dist/", "build/", ".min."])]
+    _gen_dirs = {"dist", "build", "generated"}
+    _gen_exts = {".min.js", ".min.css", ".bundle.js"}
+    def _is_gen(p: str) -> bool:
+        norm = p.replace("\\", "/")
+        parts = Path(norm).parts
+        name = parts[-1] if parts else ""
+        return any(d in parts for d in _gen_dirs) or any(name.endswith(e) for e in _gen_exts)
+    generated = [r for r in active_results if _is_gen(r["path"])]
     if generated:
         tot = sum(r["tokens"] for r in generated)
         print(f"  {YELLOW}→{NC} Generated/built files: {format_number(tot)} tokens — ignore them")
@@ -278,6 +377,8 @@ def main():
     parser.add_argument("--cost",     "-c", action="store_true",  help="Show per-file cost column (always shown in header)")
     parser.add_argument("--no-cost",        action="store_true",  help="Hide cost column")
     parser.add_argument("--no-ignore",      action="store_true",  help="Ignore .llmignore files")
+    parser.add_argument("--max-file-size", type=int, default=500_000,
+                        help="Max file size in bytes before skipping (default: 500000)")
     parser.add_argument("--json",           action="store_true",  help="Output raw JSON")
     args = parser.parse_args()
 
@@ -301,7 +402,8 @@ def main():
         sys.exit(1)
 
     print(f"Scanning {path}...", file=sys.stderr)
-    results = scan_directory(path, args.model, respect_llmignore=not args.no_ignore)
+    results = scan_directory(path, args.model, respect_llmignore=not args.no_ignore,
+                             max_file_size=args.max_file_size)
 
     if args.json:
         import json

@@ -45,8 +45,8 @@ def bench_accuracy():
         ("short function (200 chars)",     "function debounce(fn, ms) {\n  let t;\n  return (...args) => {\n    clearTimeout(t);\n    t = setTimeout(() => fn(...args), ms);\n  };\n}"),
         ("50-line module (~1.5 KB)",       (ROOT / "adapters" / "base_adapter.py").read_text()[:1500]),
         ("full adapter (~8 KB)",           (ROOT / "adapters" / "claude_adapter.py").read_text()),
-        ("lock file slice (50 KB)",        _read_first_bytes(Path("/home/bbinfosec/Documents/vaathi-main/package-lock.json"), 50_000)),
-        ("large Python file (~35 KB)",     _read_first_bytes(Path("/home/bbinfosec/TradingAgents/cli/main.py"), 35_000)),
+        ("lock file slice (50 KB)",        _read_first_bytes(Path("./sample-projects/nextjs-app/package-lock.json"), 50_000)),
+        ("large Python file (~35 KB)",     _read_first_bytes(Path("./sample-projects/python-app/cli/main.py"), 35_000)),
     ]
 
     rows = []
@@ -76,8 +76,8 @@ def bench_throughput(extra_paths: list[str] = None):
     """Measure files/sec and tokens/sec on small, medium, large repos."""
     paths = [
         ("distill (this repo, small)",   ROOT),
-        ("TradingAgents (Python, medium)", Path("/home/bbinfosec/TradingAgents")),
-        ("vaathi-main (Next.js, large)",   Path("/home/bbinfosec/Documents/vaathi-main")),
+        ("TradingAgents (Python, medium)", Path("./sample-projects/python-app")),
+        ("vaathi-main (Next.js, large)",   Path("./sample-projects/nextjs-app")),
     ]
     for p in (extra_paths or []):
         pp = Path(p)
@@ -110,8 +110,8 @@ def bench_ignore_impact():
     """Show before/after token counts when .llmignore is applied."""
     projects = [
         ("distill (this repo)",   ROOT,                                                    None),
-        ("TradingAgents",         Path("/home/bbinfosec/TradingAgents"),                   None),
-        ("vaathi-main (Next.js)", Path("/home/bbinfosec/Documents/vaathi-main"),           _vaathi_ignore()),
+        ("TradingAgents",         Path("./sample-projects/python-app"),                   None),
+        ("vaathi-main (Next.js)", Path("./sample-projects/nextjs-app"),           _vaathi_ignore()),
     ]
 
     rows = []

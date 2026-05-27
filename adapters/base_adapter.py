@@ -7,7 +7,6 @@ tooling works identically across Claude, OpenAI, Gemini, and Ollama.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 import time
 
 
@@ -82,14 +81,19 @@ class BaseLLMAdapter(ABC):
         max_tokens: int = 4096,
         max_context_tokens: int = 100_000,
         auto_compact_threshold: float = 0.75,  # compact at 75% context
+        compact_quality: str = "detailed",  # "fast" | "detailed"
     ):
+        if compact_quality not in ("fast", "detailed"):
+            raise ValueError(f"compact_quality must be 'fast' or 'detailed', got {compact_quality!r}")
         self.model = model
         self.system_prompt = system_prompt
         self.max_tokens = max_tokens
         self.max_context_tokens = max_context_tokens
         self.auto_compact_threshold = auto_compact_threshold
+        self.compact_quality = compact_quality
         self.stats = SessionStats(model=model)
         self._history: list[Message] = []
+        self._last_compact_raw: str = ""
 
     # ── Abstract interface ─────────────────────────────────
     
@@ -130,11 +134,20 @@ class BaseLLMAdapter(ABC):
 
         return result.content
 
+    @property
+    def last_compact_raw(self) -> str:
+        """The raw (pre-summary) history text from the last compaction, for inspection."""
+        return self._last_compact_raw
+
     def compact(self, preserve_last_n: int = 2) -> str:
         """
         Compress conversation history into a summary.
         Preserves the last N turns verbatim for immediate context.
         Returns the summary text.
+
+        When ``compact_quality`` is ``"detailed"``, uses a structured JSON prompt
+        that extracts decisions, files_modified, errors, current_state, and
+        open_questions.  Truncation limit is raised to 1000 chars per message.
         """
         if len(self._history) <= preserve_last_n * 2:
             return ""  # Nothing to compact
@@ -142,23 +155,37 @@ class BaseLLMAdapter(ABC):
         to_summarize = self._history[:-preserve_last_n * 2] if preserve_last_n > 0 else self._history
         preserve = self._history[-preserve_last_n * 2:] if preserve_last_n > 0 else []
 
+        trunc = 1000 if self.compact_quality == "detailed" else 500
         history_text = "\n".join(
-            f"{m.role.upper()}: {m.content[:500]}{'...' if len(m.content) > 500 else ''}"
+            f"{m.role.upper()}: {m.content[:trunc]}{'...' if len(m.content) > trunc else ''}"
             for m in to_summarize
         )
-
-        summary_prompt = (
-            f"Summarize this conversation history concisely. "
-            f"Preserve: key decisions made, files modified, current task state, any errors encountered.\n\n"
-            f"{history_text}"
+        # Store untruncated version for inspection
+        self._last_compact_raw = "\n".join(
+            f"{m.role.upper()}: {m.content}" for m in to_summarize
         )
-        
+
+        if self.compact_quality == "detailed":
+            summary_prompt = (
+                "Summarize this conversation history as structured JSON with the keys: "
+                "decisions (list of key decisions made), files_modified (list of file paths changed), "
+                "errors (list of errors encountered), current_state (string describing where things stand), "
+                "open_questions (list of unresolved items). Be concise but preserve important detail.\n\n"
+                f"{history_text}"
+            )
+        else:
+            summary_prompt = (
+                "Summarize this conversation history concisely. "
+                "Preserve: key decisions made, files modified, current task state, any errors encountered.\n\n"
+                f"{history_text}"
+            )
+
         summary_msg = [{"role": "user", "content": summary_prompt}]
         result = self._call_api(summary_msg)
-        
+
         summary = f"[Compacted history]\n{result.content}"
         self._history = [Message(role="assistant", content=summary)] + preserve
-        
+
         tokens_before = self.count_tokens(history_text)
         tokens_after = self.count_tokens(summary)
         print(f"[TokenOptimizer] Compacted: {tokens_before:,} → {tokens_after:,} tokens "
@@ -201,26 +228,55 @@ class BaseLLMAdapter(ABC):
         print(f"  Elapsed         : {s['elapsed_seconds']}s")
         print(f"{'─'*50}\n")
 
-    def load_file_lazy(self, file_path: str, max_lines: int = 300) -> str:
+    def load_file_lazy(
+        self,
+        file_path: str,
+        max_lines: int = 300,
+        start_line: int = None,
+        end_line: int = None,
+    ) -> str:
         """
         Load a file into context only when needed.
-        Truncates large files and warns you.
+        Truncates large files showing first half + last half with an omission marker.
+
+        Parameters:
+            start_line: 1-based start line for range-based loading.
+            end_line:   1-based end line (inclusive) for range-based loading.
         """
         from pathlib import Path
         path = Path(file_path)
         if not path.exists():
             return f"[File not found: {file_path}]"
-        
+
         with open(path, encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-        
+            all_lines = f.readlines()
+
+        total_line_count = len(all_lines)
+
+        # Range-based loading
+        if start_line is not None or end_line is not None:
+            s = max((start_line or 1) - 1, 0)
+            e = min(end_line or total_line_count, total_line_count)
+            lines = all_lines[s:e]
+            range_label = f" (lines {s+1}-{e} of {total_line_count})"
+        else:
+            lines = all_lines
+            range_label = ""
+
         if len(lines) > max_lines:
-            print(f"[TokenOptimizer] {file_path} has {len(lines)} lines — "
-                  f"truncating to {max_lines}. Use a line range for specific sections.")
-            lines = lines[:max_lines]
-            lines.append(f"\n... [{len(lines) - max_lines} more lines truncated]")
-        
-        content = f"```{path.suffix.lstrip('.')}\n# {file_path}\n{''.join(lines)}```"
+            omitted = len(lines) - max_lines
+            half = max_lines // 2
+            head = lines[:half]
+            tail = lines[-half:]
+            if start_line is not None or end_line is not None:
+                print(f"[TokenOptimizer] {file_path} range has {len(lines)} lines — "
+                      f"truncating to {max_lines}. Narrow the range for full content.")
+            else:
+                print(f"[TokenOptimizer] {file_path} has {total_line_count} lines — "
+                      f"truncating to {max_lines}. Use start_line/end_line for specific sections.")
+            lines = head + [f"\n... [{omitted} lines omitted]\n"] + tail
+
+        content = f"```{path.suffix.lstrip('.')}\n# {file_path}{range_label}\n{''.join(lines)}```"
         tokens = self.count_tokens(content)
         print(f"[TokenOptimizer] Loaded {file_path}: {tokens:,} tokens")
         return content

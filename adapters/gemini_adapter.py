@@ -68,6 +68,7 @@ class GeminiAdapter(BaseLLMAdapter):
         system_prompt: str = "",
         max_tokens: int = 4096,
         api_key: str = None,
+        lean_mode: bool = True,
         **kwargs,
     ):
         if not GEMINI_AVAILABLE:
@@ -76,8 +77,11 @@ class GeminiAdapter(BaseLLMAdapter):
             )
 
         context_limit = self.CONTEXT_LIMITS.get(model, 1_000_000)
-        full_system = (self.LEAN_SYSTEM_PREFIX + system_prompt).strip() if system_prompt \
-                      else self.LEAN_SYSTEM_PREFIX.strip()
+        if lean_mode:
+            full_system = (self.LEAN_SYSTEM_PREFIX + system_prompt).strip() if system_prompt \
+                          else self.LEAN_SYSTEM_PREFIX.strip()
+        else:
+            full_system = system_prompt.strip() if system_prompt else ""
 
         super().__init__(
             model=model,
@@ -90,7 +94,7 @@ class GeminiAdapter(BaseLLMAdapter):
         genai.configure(api_key=api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
         self._model = genai.GenerativeModel(
             model_name=model,
-            system_instruction=full_system,
+            system_instruction=full_system or None,
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=max_tokens,
                 temperature=0.2,

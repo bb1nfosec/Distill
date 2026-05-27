@@ -9,7 +9,6 @@ Features:
 """
 
 import os
-import json
 from .base_adapter import BaseLLMAdapter, CompletionResult, Message
 
 try:
@@ -52,13 +51,15 @@ class ClaudeAdapter(BaseLLMAdapter):
         max_tokens: int = 4096,
         enable_caching: bool = True,
         api_key: str = None,
+        subagent_model: str = None,
         **kwargs
     ):
         context_limit = self.CONTEXT_LIMITS.get(model, 200_000)
         super().__init__(model=model, system_prompt=system_prompt,
                          max_tokens=max_tokens, max_context_tokens=context_limit, **kwargs)
-        
+
         self.enable_caching = enable_caching
+        self.subagent_model = subagent_model
         
         if not ANTHROPIC_AVAILABLE:
             raise ImportError("anthropic package not installed. Run: pip install anthropic")
@@ -71,6 +72,16 @@ class ClaudeAdapter(BaseLLMAdapter):
             enc = tiktoken.get_encoding("cl100k_base")
             return len(enc.encode(text))
         except ImportError:
+            import warnings
+            import core.token_counter as _tc
+            if not _tc._TIKTOKEN_WARNING_SHOWN:
+                warnings.warn(
+                    "tiktoken not installed — token counts are approximate "
+                    "(character-based estimation). Install tiktoken for accurate counts: "
+                    "pip install tiktoken",
+                    stacklevel=2,
+                )
+                _tc._TIKTOKEN_WARNING_SHOWN = True
             return max(1, len(text) // 4)
 
     def _call_api(self, messages: list[dict], **kwargs) -> CompletionResult:
@@ -122,11 +133,16 @@ class ClaudeAdapter(BaseLLMAdapter):
             cached_tokens=cached,
         )
 
-    def run_subagent(self, task: str, context_files: list[str] = None) -> str:
+    def run_subagent(self, task: str, context_files: list[str] = None, model: str = None) -> str:
         """
         Run a research task in a separate context window (subagent pattern).
         Returns only a summary — keeps your main conversation clean.
-        
+
+        Model resolution order:
+          1. call-level ``model`` parameter
+          2. instance-level ``self.subagent_model``
+          3. ``"claude-haiku-4-5"`` (default)
+
         Example:
             summary = claude.run_subagent(
                 "Investigate how authentication handles token refresh",
@@ -145,9 +161,11 @@ class ClaudeAdapter(BaseLLMAdapter):
                 content = self.load_file_lazy(fp, max_lines=200)
                 content_parts.append(content)
 
+        resolved_model = model or self.subagent_model or "claude-haiku-4-5"
+
         # Fresh subagent — no history
         sub = ClaudeAdapter(
-            model="claude-haiku-4-5",  # Use cheaper model for research
+            model=resolved_model,
             system_prompt=subagent_system,
             max_tokens=1024,
             enable_caching=False,

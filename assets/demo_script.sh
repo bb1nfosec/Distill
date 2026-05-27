@@ -24,7 +24,7 @@ _pause 0.5
 _type "distill scan --path ~/Documents/vaathi-main --model claude"
 _pause 0.4
 python3 "$ROOT/core/token_counter.py" \
-  --path /home/bbinfosec/Documents/vaathi-main \
+  --path ./sample-projects/nextjs-app \
   --model claude --top 8 2>/dev/null
 _pause 2.5
 
@@ -32,7 +32,7 @@ _pause 2.5
 _type "distill analyze --path ~/Documents/vaathi-main"
 _pause 0.4
 python3 "$ROOT/core/context_analyzer.py" \
-  --path /home/bbinfosec/Documents/vaathi-main \
+  --path ./sample-projects/nextjs-app \
   --model claude 2>/dev/null
 _pause 2.0
 
@@ -40,7 +40,7 @@ _pause 2.0
 _type "distill generate --output ~/Documents/vaathi-main --model all"
 _pause 0.4
 python3 "$ROOT/scripts/generate_config.py" \
-  --output /home/bbinfosec/Documents/vaathi-main \
+  --output ./sample-projects/nextjs-app \
   --model all 2>/dev/null
 _pause 1.5
 
@@ -48,7 +48,7 @@ _pause 1.5
 _type "distill scan --path ~/Documents/vaathi-main --model claude"
 _pause 0.4
 python3 "$ROOT/core/token_counter.py" \
-  --path /home/bbinfosec/Documents/vaathi-main \
+  --path ./sample-projects/nextjs-app \
   --model claude --top 8 2>/dev/null
 _pause 2.0
 

@@ -8,7 +8,7 @@ Unacceptable: harassment, personal attacks, discriminatory language, publishing 
 
 ## Enforcement
 
-Issues can be reported to **vickytestssec@gmail.com**. Maintainers will investigate and take appropriate action, which may include removing comments, closing issues, or banning repeat offenders.
+Issues can be reported to the project maintainers. Maintainers will investigate and take appropriate action, which may include removing comments, closing issues, or banning repeat offenders.
 
 ## Attribution
 
