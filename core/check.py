@@ -73,7 +73,7 @@ def run_check(
     status_icon  = f"{RED}✗ FAIL{NC}" if failed else f"{GREEN}✓ PASS{NC}"
     budget_color = RED if over_budget else (YELLOW if pct > max_pct * 0.8 else GREEN)
 
-    print(f"\n{BOLD}  distill check{NC}  —  {path}")
+    print(f"\n{BOLD}  skim check{NC}  —  {path}")
     print(f"  {'─'*50}")
     print(f"  Status        : {status_icon}")
     print(f"  Model         : {model}")
@@ -86,7 +86,7 @@ def run_check(
         print(f"  Top offenders:")
         for r in results[:5]:
             print(f"    {r['path'][:55]:<55}  {format_number(r['tokens']):>7}  {format_cost(r['cost_usd'])}")
-        print(f"\n  Fix: run `distill generate` to create .llmignore, or add large files manually.")
+        print(f"\n  Fix: run `skim generate` to create .llmignore, or add large files manually.")
 
     if patterns:
         print(f"\n  Waste patterns found: {len(patterns)}")

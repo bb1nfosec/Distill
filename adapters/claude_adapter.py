@@ -38,16 +38,21 @@ class ClaudeAdapter(BaseLLMAdapter):
 
     # Context window limits per Claude model
     CONTEXT_LIMITS = {
-        "claude-opus-4":      200_000,
-        "claude-sonnet-4-5":  200_000,
-        "claude-haiku-4-5":   200_000,
-        "claude-3-5-sonnet":  200_000,
-        "claude-3-haiku":     200_000,
+        "claude-opus-4-8":              200_000,
+        "claude-opus-4-5":              200_000,
+        "claude-sonnet-4-6":            200_000,
+        "claude-sonnet-4-5":            200_000,
+        "claude-haiku-4-5-20251001":    200_000,
+        "claude-haiku-4-5":             200_000,
+        "claude-3-7-sonnet-20250219":   200_000,
+        "claude-3-5-sonnet-20241022":   200_000,
+        "claude-3-5-haiku-20241022":    200_000,
+        "claude-3-opus-20240229":       200_000,
     }
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-5",
+        model: str = "claude-sonnet-4-6",
         system_prompt: str = "",
         max_tokens: int = 4096,
         enable_caching: bool = True,
@@ -147,7 +152,7 @@ class ClaudeAdapter(BaseLLMAdapter):
 
         # Fresh subagent — no history
         sub = ClaudeAdapter(
-            model="claude-haiku-4-5",  # Use cheaper model for research
+            model="claude-haiku-4-5-20251001",  # Use cheaper model for research
             system_prompt=subagent_system,
             max_tokens=1024,
             enable_caching=False,

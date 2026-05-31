@@ -387,7 +387,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self._anthropic_sync(body, api_key, saved, t0)
 
     def _anthropic_sync(self, body: dict, api_key: str, saved: int, t0: float) -> None:
-        status, resp = self._call_anthropic(body, api_key)
+        status, resp = self._call_anthropic(body, api_key, self.headers.get("anthropic-beta", ""))
 
         usage  = resp.get("usage", {})
         inp    = usage.get("input_tokens",         0)
@@ -413,6 +413,9 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         req.add_header("Content-Type",      "application/json")
         req.add_header("x-api-key",         api_key)
         req.add_header("anthropic-version", "2023-06-01")
+        beta = self.headers.get("anthropic-beta", "")
+        if beta:
+            req.add_header("anthropic-beta", beta)
 
         self.send_response(200)
         self.send_header("Content-Type",  "text/event-stream")
@@ -457,13 +460,15 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             "latency_ms": ms, "session_id": id(_session),
         })
 
-    def _call_anthropic(self, body: dict, api_key: str) -> tuple[int, dict]:
+    def _call_anthropic(self, body: dict, api_key: str, beta: str = "") -> tuple[int, dict]:
         url  = "https://api.anthropic.com/v1/messages"
         data = json.dumps(body).encode()
         req  = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type",      "application/json")
         req.add_header("x-api-key",         api_key)
         req.add_header("anthropic-version", "2023-06-01")
+        if beta:
+            req.add_header("anthropic-beta", beta)
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 return r.status, json.loads(r.read())

@@ -190,7 +190,7 @@ def print_report(results: list[dict], model: str, top_n: int = 20,
     rate  = PRICING.get(model, PRICING["generic"])
 
     print(f"\n{BOLD}{'─'*62}{NC}")
-    print(f"{BOLD}  distill — Context Audit{NC}")
+    print(f"{BOLD}  skim — Context Audit{NC}")
     print(f"{'─'*62}")
     print(f"  Model         : {model}  (${rate:.2f} / 1M input tokens)")
     print(f"  Context limit : {format_number(limit)} tokens")

@@ -174,9 +174,12 @@ def cmd_proxy(argv):
     p.add_argument("--model",     "-m", default="claude")
     p.add_argument("--no-filter",       action="store_true",
                    help="Disable waste filtering (passthrough only)")
+    p.add_argument("--no-cache",        action="store_true",
+                   help="Disable automatic prompt caching injection")
     args = p.parse_args(argv)
     limit = CONTEXT_LIMITS.get(args.model, 200_000)
-    serve(args.port, args.host, Path(args.path).resolve(), limit, args.model, args.no_filter)
+    serve(args.port, args.host, Path(args.path).resolve(), limit, args.model,
+          args.no_filter, args.no_cache)
     return 0
 
 

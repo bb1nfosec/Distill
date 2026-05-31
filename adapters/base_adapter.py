@@ -215,10 +215,11 @@ class BaseLLMAdapter(ABC):
             lines = f.readlines()
         
         if len(lines) > max_lines:
-            print(f"[TokenOptimizer] {file_path} has {len(lines)} lines — "
+            original_len = len(lines)
+            print(f"[TokenOptimizer] {file_path} has {original_len} lines — "
                   f"truncating to {max_lines}. Use a line range for specific sections.")
             lines = lines[:max_lines]
-            lines.append(f"\n... [{len(lines) - max_lines} more lines truncated]")
+            lines.append(f"\n... [{original_len - max_lines} more lines truncated]")
         
         content = f"```{path.suffix.lstrip('.')}\n# {file_path}\n{''.join(lines)}```"
         tokens = self.count_tokens(content)

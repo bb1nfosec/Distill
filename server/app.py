@@ -176,7 +176,7 @@ def create_app(db_path: Path = None) -> "Flask":
     def stats_summary_route():
         days = int(request.args.get("days", 7))
         uid  = None if request.user["role"] == "admin" else request.user["id"]
-        data = stats_summary(db, days)
+        data = stats_summary(db, days, user_id=uid)
         return jsonify(data)
 
     @app.route("/api/v1/stats/daily")

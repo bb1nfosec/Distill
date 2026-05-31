@@ -40,6 +40,8 @@ class GeminiAdapter(BaseLLMAdapter):
     """
 
     CONTEXT_LIMITS = {
+        "gemini-2.5-pro":         1_048_576,
+        "gemini-2.5-flash":       1_048_576,
         "gemini-2.0-flash":       1_048_576,
         "gemini-2.0-flash-lite":  1_048_576,
         "gemini-1.5-pro":         1_048_576,
@@ -49,6 +51,8 @@ class GeminiAdapter(BaseLLMAdapter):
 
     # USD per 1M input tokens (prompts ≤ 128k)
     INPUT_PRICING = {
+        "gemini-2.5-pro":        1.25,
+        "gemini-2.5-flash":      0.15,
         "gemini-2.0-flash":      0.10,
         "gemini-2.0-flash-lite": 0.075,
         "gemini-1.5-pro":        1.25,
@@ -64,7 +68,7 @@ class GeminiAdapter(BaseLLMAdapter):
 
     def __init__(
         self,
-        model: str = "gemini-1.5-flash",
+        model: str = "gemini-2.0-flash",
         system_prompt: str = "",
         max_tokens: int = 4096,
         api_key: str = None,

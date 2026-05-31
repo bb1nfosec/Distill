@@ -52,7 +52,7 @@ def run_fix(
 
     patterns = analyze_directory(path, model)
 
-    print(f"\n{BOLD}  distill fix{NC}  —  {path}")
+    print(f"\n{BOLD}  skim fix{NC}  —  {path}")
     print(f"  {'─'*54}")
     print(f"  Before  : {format_number(before_tokens)} tokens  "
           f"({before_pct:.1f}% ctx)  {format_cost(before_cost)}/session")
@@ -100,7 +100,7 @@ def run_fix(
     new_lines = existing.copy()
     if new_lines and new_lines[-1] != "":
         new_lines.append("")
-    new_lines.append("# Added by distill fix")
+    new_lines.append("# Added by skim fix")
     new_lines.extend(added_rules)
 
     # Write temporarily (even for dry-run) so after-scan is accurate

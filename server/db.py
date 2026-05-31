@@ -171,8 +171,7 @@ def insert_event(conn, event: dict) -> int:
 
 def query_events(conn, days: int = 30, user_id: str = None,
                  limit: int = 500, offset: int = 0) -> list[dict]:
-    from_ts = datetime.now(timezone.utc).isoformat()[:-6]
-    params  = [f"{days} days"]
+    params  = [f"-{days} days"]
     where   = ["datetime(ts) >= datetime('now', ?, 'utc')"]
     if user_id:
         where.append("user_id=?")
@@ -186,8 +185,13 @@ def query_events(conn, days: int = 30, user_id: str = None,
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def stats_summary(conn, days: int = 7) -> dict:
-    sql = """
+def stats_summary(conn, days: int = 7, user_id: str = None) -> dict:
+    where  = ["datetime(ts) >= datetime('now', ?, 'utc')"]
+    params = [f"-{days} days"]
+    if user_id:
+        where.append("user_id=?")
+        params.append(user_id)
+    sql = f"""
     SELECT
         COUNT(*)               AS total_calls,
         COALESCE(SUM(input_tokens),  0) AS total_input,
@@ -196,9 +200,9 @@ def stats_summary(conn, days: int = 7) -> dict:
         COALESCE(SUM(cost_usd),      0) AS total_cost,
         COALESCE(AVG(input_tokens),  0) AS avg_input
     FROM events
-    WHERE datetime(ts) >= datetime('now', ?, 'utc')
+    WHERE {' AND '.join(where)}
     """
-    row = conn.execute(sql, [f"-{days} days"]).fetchone()
+    row = conn.execute(sql, params).fetchone()
     return dict(row) if row else {}
 
 
