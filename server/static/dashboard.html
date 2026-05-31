@@ -4,55 +4,79 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>skim — Token Intelligence Dashboard</title>
+
+<!-- Inter font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <style>
 :root {
-  --bg:        #0d0f14;
-  --surface:   #161920;
-  --border:    #252832;
-  --text:      #e2e4ea;
-  --muted:     #7a7f8e;
-  --accent:    #6c63ff;
-  --accent2:   #00d4aa;
-  --warn:      #f5a623;
-  --danger:    #ff4d6d;
-  --success:   #00d4aa;
-  --font:      'Inter', 'Segoe UI', system-ui, sans-serif;
+  --bg:       #0a0c10;
+  --surface:  #111318;
+  --surface2: #161920;
+  --border:   #1e2130;
+  --border2:  #252a3a;
+  --text:     #e4e6f0;
+  --muted:    #6b7280;
+  --accent:   #6c63ff;
+  --accent2:  #00d4aa;
+  --warn:     #f5a623;
+  --danger:   #ff4d6d;
+  --success:  #00d4aa;
+  --blue:     #3b82f6;
+  --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+  --radius:   10px;
+  --shadow-lg:0 4px 16px rgba(0,0,0,.5);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
 body { background: var(--bg); color: var(--text); font-family: var(--font);
-       font-size: 14px; line-height: 1.6; }
+       line-height: 1.55; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
 
 /* Layout */
 .shell   { display: flex; min-height: 100vh; }
-.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border);
-           display: flex; flex-direction: column; position: fixed; height: 100vh; }
-.main    { margin-left: 220px; flex: 1; display: flex; flex-direction: column; }
+.sidebar { width: 216px; background: var(--surface); border-right: 1px solid var(--border);
+           display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 30; }
+.main    { margin-left: 216px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .topbar  { background: var(--surface); border-bottom: 1px solid var(--border);
-           padding: 0 28px; height: 56px; display: flex; align-items: center;
-           justify-content: space-between; position: sticky; top: 0; z-index: 10; }
-.content { padding: 28px; flex: 1; }
+           padding: 0 24px; height: 54px; display: flex; align-items: center;
+           justify-content: space-between; position: sticky; top: 0; z-index: 20;
+           backdrop-filter: blur(12px); }
+.content { padding: 24px; flex: 1; }
 
 /* Sidebar */
-.brand   { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
-.brand-name { font-size: 20px; font-weight: 700; color: var(--accent);
-              letter-spacing: -0.5px; }
-.brand-tag  { font-size: 11px; color: var(--muted); margin-top: 2px; }
-.nav        { padding: 12px 8px; flex: 1; }
-.nav-section { color: var(--muted); font-size: 10px; font-weight: 600;
-               text-transform: uppercase; letter-spacing: 1px;
-               padding: 12px 12px 6px; }
-.nav-item   { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-              border-radius: 8px; color: var(--muted); cursor: pointer;
-              text-decoration: none; transition: all .15s; margin: 1px 0; }
-.nav-item:hover { background: rgba(108,99,255,.1); color: var(--text); }
-.nav-item.active { background: rgba(108,99,255,.15); color: var(--accent); }
-.nav-icon { width: 18px; text-align: center; }
-.sidebar-footer { padding: 16px; border-top: 1px solid var(--border); }
+.brand      { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+.brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.brand-icon { width: 28px; height: 28px; background: var(--accent); border-radius: 7px;
+              display: flex; align-items: center; justify-content: center; }
+.brand-icon svg { width: 16px; height: 16px; color: #fff; }
+.brand-name { font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -.5px; }
+.brand-tag  { font-size: 11px; color: var(--muted); padding-left: 2px; }
+.nav        { padding: 10px 8px; flex: 1; overflow-y: auto; }
+.nav-section { color: var(--muted); font-size: 10px; font-weight: 700;
+               text-transform: uppercase; letter-spacing: 1px; padding: 12px 10px 5px; }
+.nav-item   { display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+              border-radius: 7px; color: var(--muted); cursor: pointer;
+              text-decoration: none; transition: background .12s, color .12s;
+              margin: 1px 0; font-size: 13px; font-weight: 500; user-select: none; }
+.nav-item:hover  { background: rgba(108,99,255,.08); color: var(--text); }
+.nav-item.active { background: rgba(108,99,255,.14); color: var(--accent); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 2; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid var(--border); }
 .user-badge { display: flex; align-items: center; gap: 10px; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
           display: flex; align-items: center; justify-content: center;
-          font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+          font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
 .user-info { font-size: 12px; }
 .user-name  { font-weight: 600; color: var(--text); }
 .user-role  { color: var(--muted); font-size: 11px; }
@@ -71,50 +95,59 @@ body { background: var(--bg); color: var(--text); font-family: var(--font);
 .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
 
 /* Cards */
-.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-.card  { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-         padding: 20px; }
-.card-label { color: var(--muted); font-size: 12px; font-weight: 500;
-              text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-.card-value { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -1px; }
-.card-delta { font-size: 12px; margin-top: 6px; }
-.card-delta.up    { color: var(--danger); }
-.card-delta.down  { color: var(--success); }
-.card-delta.neutral { color: var(--muted); }
-.card-icon { float: right; font-size: 24px; opacity: .5; }
+.cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.card  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+         padding: 20px; transition: border-color .2s, box-shadow .2s; }
+.card:hover { border-color: var(--border2); box-shadow: var(--shadow-lg); }
+.card-label { color: var(--muted); font-size: 11px; font-weight: 600;
+              text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+.card-value { font-size: 28px; font-weight: 800; letter-spacing: -1.5px; color: var(--text); }
+.card-delta { font-size: 12px; margin-top: 7px; color: var(--muted); font-weight: 500; }
+.card-delta.up   { color: var(--danger); }
+.card-delta.down { color: var(--success); }
+.card-icon { float: right; width: 36px; height: 36px; border-radius: 9px;
+             display: flex; align-items: center; justify-content: center;
+             background: rgba(108,99,255,.1); margin-left: 8px; }
+.card-icon svg { width: 18px; height: 18px; color: var(--accent); stroke-width: 1.8; }
 
 /* Charts */
-.charts { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
-.charts-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-.chart-card { background: var(--surface); border: 1px solid var(--border);
-              border-radius: 12px; padding: 20px; }
-.chart-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
-.chart-wrap { position: relative; height: 220px; }
+.charts      { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px; }
+.charts-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.chart-card  { background: var(--surface); border: 1px solid var(--border);
+               border-radius: var(--radius); padding: 20px; transition: border-color .2s; }
+.chart-card:hover { border-color: var(--border2); }
+.chart-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 14px;
+               display: flex; justify-content: space-between; align-items: center; }
+.chart-wrap  { position: relative; height: 200px; }
 
 /* Table */
-.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-.table-header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+.table-card   { background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.table-header { padding: 14px 18px; border-bottom: 1px solid var(--border);
                 display: flex; justify-content: space-between; align-items: center; }
-.table-title { font-size: 13px; font-weight: 600; }
+.table-title  { font-size: 13px; font-weight: 700; }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 11px 20px; text-align: left; border-bottom: 1px solid var(--border); }
-th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
-     letter-spacing: .5px; }
-td { font-size: 13px; }
+th { padding: 9px 18px; text-align: left; font-size: 10px; font-weight: 700;
+     color: var(--muted); text-transform: uppercase; letter-spacing: .6px;
+     border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 18px; font-size: 12px; font-weight: 500;
+     border-bottom: 1px solid rgba(255,255,255,.03); }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(255,255,255,.02); }
+tbody tr { transition: background .1s; }
+tbody tr:hover td { background: rgba(255,255,255,.02); }
 
 /* Badges */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
-         font-size: 11px; font-weight: 600; }
-.badge-green { background: rgba(0,212,170,.15); color: var(--success); }
-.badge-red   { background: rgba(255,77,109,.15); color: var(--danger); }
-.badge-blue  { background: rgba(108,99,255,.15); color: var(--accent); }
-.badge-warn  { background: rgba(245,166,35,.15); color: var(--warn); }
+.badge { display: inline-flex; align-items: center; gap: 4px;
+         padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; }
+.badge-green  { background: rgba(0,212,170,.12); color: var(--success); }
+.badge-red    { background: rgba(255,77,109,.12); color: var(--danger); }
+.badge-blue   { background: rgba(108,99,255,.12); color: var(--accent); }
+.badge-warn   { background: rgba(245,166,35,.12); color: var(--warn); }
+.badge-muted  { background: rgba(107,114,128,.1); color: var(--muted); }
 
 /* Health bar */
-.hbar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 8px; }
-.hbar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+.hbar { height: 3px; border-radius: 99px; background: var(--border); margin-top: 10px; overflow: hidden; }
+.hbar-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
 .hbar-fill.green { background: var(--success); }
 .hbar-fill.warn  { background: var(--warn); }
 .hbar-fill.red   { background: var(--danger); }
@@ -184,36 +217,39 @@ tr:hover td { background: rgba(255,255,255,.02); }
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="brand">
-      <div class="brand-name">skim</div>
+      <div class="brand-logo">
+        <div class="brand-icon"><i data-lucide="zap"></i></div>
+        <span class="brand-name">skim</span>
+      </div>
       <div class="brand-tag">Token Intelligence</div>
     </div>
     <div class="nav">
       <div class="nav-section">Overview</div>
       <a class="nav-item active" onclick="showPage('overview')">
-        <span class="nav-icon">◈</span> Dashboard
+        <i data-lucide="layout-dashboard"></i> Dashboard
       </a>
       <a class="nav-item" onclick="showPage('sessions')">
-        <span class="nav-icon">⚡</span> Sessions
+        <i data-lucide="activity"></i> Sessions
       </a>
       <div class="nav-section">Analysis</div>
       <a class="nav-item" onclick="showPage('usage')">
-        <span class="nav-icon">📊</span> Usage
+        <i data-lucide="bar-chart-2"></i> Usage
       </a>
       <a class="nav-item" onclick="showPage('models')">
-        <span class="nav-icon">🤖</span> Models
+        <i data-lucide="cpu"></i> Models
       </a>
       <a class="nav-item" onclick="showPage('savings')">
-        <span class="nav-icon">💰</span> Savings
+        <i data-lucide="piggy-bank"></i> Savings
       </a>
       <div class="nav-section">Admin</div>
       <a class="nav-item" id="nav-team" onclick="showPage('team')" style="display:none">
-        <span class="nav-icon">👥</span> Team
+        <i data-lucide="users"></i> Team
       </a>
       <a class="nav-item" id="nav-insights" onclick="showPage('insights')" style="display:none">
-        <span class="nav-icon">💡</span> Insights
+        <i data-lucide="lightbulb"></i> Insights
       </a>
       <a class="nav-item" onclick="showPage('settings')">
-        <span class="nav-icon">⚙</span> Settings
+        <i data-lucide="settings"></i> Settings
       </a>
     </div>
     <div class="sidebar-footer">
@@ -247,25 +283,25 @@ tr:hover td { background: rgba(255,255,255,.02); }
       <!-- Summary Cards -->
       <div class="cards">
         <div class="card">
-          <div class="card-icon">📤</div>
+          <div class="card-icon"><i data-lucide="send"></i></div>
           <div class="card-label">Total Tokens Sent</div>
           <div class="card-value" id="c-total">—</div>
           <div class="card-delta neutral" id="c-calls">— API calls</div>
         </div>
         <div class="card">
-          <div class="card-icon">💵</div>
+          <div class="card-icon"><i data-lucide="dollar-sign"></i></div>
           <div class="card-label">Estimated Cost</div>
           <div class="card-value" id="c-cost">—</div>
           <div class="card-delta neutral" id="c-avg">avg per call</div>
         </div>
         <div class="card">
-          <div class="card-icon">✂️</div>
+          <div class="card-icon"><i data-lucide="scissors"></i></div>
           <div class="card-label">Tokens Saved by skim</div>
           <div class="card-value" id="c-saved">—</div>
           <div class="card-delta down" id="c-savepct">— reduction</div>
         </div>
         <div class="card">
-          <div class="card-icon">⚡</div>
+          <div class="card-icon"><i data-lucide="zap"></i></div>
           <div class="card-label">Avg Context Fill</div>
           <div class="card-value" id="c-fill">—</div>
           <div class="card-delta neutral">of model limit</div>
@@ -495,11 +531,25 @@ export SKIM_SERVER_TOKEN=<span id="key-hint"></span></pre>
 </div><!-- end shell -->
 
 <script>
+// Init Lucide
+lucide.createIcons();
+
+// Chart.js defaults
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.animation.duration = 500;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyleWidth = 8;
+
 const API = window.location.origin;
 let _token = localStorage.getItem('skim_token') || '';
 let _user  = null;
 let _charts = {};
 let _days   = 30;
+
+// Better chart grid colours
+const GRID = 'rgba(255,255,255,.04)', TICK = '#6b7280';
+const P    = {accent:'#6c63ff',green:'#00d4aa',warn:'#f5a623',red:'#ff4d6d',blue:'#3b82f6',purple:'#a78bfa',orange:'#fb923c'};
+const PALETTE = [P.accent,P.green,P.warn,P.red,P.blue,P.purple,P.orange];
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
@@ -661,58 +711,66 @@ function renderSummary(s) {
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────
-const C = { accent:'#6c63ff', green:'#00d4aa', warn:'#f5a623', red:'#ff4d6d',
-            blue:'#3b82f6', grid:'rgba(255,255,255,.05)', text:'#7a7f8e' };
-
 function mkChart(id, type, data, opts = {}) {
   const el = document.getElementById(id);
+  if (!el) return;
   if (_charts[id]) _charts[id].destroy();
   _charts[id] = new Chart(el, { type, data, options: {
     responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { labels: { color: C.text, font: { size: 12 } } } },
-    scales: type !== 'doughnut' ? {
-      x: { grid: { color: C.grid }, ticks: { color: C.text, font: { size: 11 } } },
-      y: { grid: { color: C.grid }, ticks: { color: C.text, font: { size: 11 },
-            callback: v => fmtN(v) } },
+    plugins: {
+      legend: { labels: { color: TICK, font: {size:11}, boxWidth:10 } },
+      tooltip: {
+        backgroundColor: '#1e2130', borderColor: '#252a3a', borderWidth: 1,
+        titleColor: '#e4e6f0', bodyColor: '#9ca3af', padding: 10, cornerRadius: 8,
+      },
+    },
+    scales: type !== 'doughnut' && type !== 'pie' ? {
+      x: { grid: {color:GRID}, ticks: {color:TICK, font:{size:10}} },
+      y: { grid: {color:GRID}, ticks: {color:TICK, font:{size:10}, callback: v => fmtN(v)} },
     } : undefined,
     ...opts,
   }});
 }
 
+function chartGrad(ctx, color, a=.28) {
+  const {chartArea} = ctx.chart;
+  if (!chartArea) return 'transparent';
+  const g = ctx.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+  g.addColorStop(0, color + Math.round(a*255).toString(16).padStart(2,'0'));
+  g.addColorStop(1, color + '00');
+  return g;
+}
+
 function renderUsageChart(rows) {
-  const labels = rows.map(r => r.day.slice(5));
   mkChart('chart-usage', 'line', {
-    labels,
+    labels: rows.map(r => r.day.slice(5)),
     datasets: [{
       label: 'Input tokens',
       data: rows.map(r => r.input_tokens || 0),
-      borderColor: C.accent, backgroundColor: 'rgba(108,99,255,.1)',
-      fill: true, tension: 0.4, pointRadius: 3,
+      borderColor: P.accent,
+      backgroundColor: ctx => chartGrad(ctx, '#6c63ff'),
+      fill: true, tension: 0.4, pointRadius: 3, borderWidth: 2,
     }],
   });
 }
 
 function renderModelChart(rows) {
-  const colors = [C.accent, C.green, C.warn, C.red, C.blue, '#a78bfa', '#fb923c'];
   mkChart('chart-model', 'doughnut', {
     labels: rows.map(r => r.model || 'unknown'),
     datasets: [{
       data: rows.map(r => r.input_tokens || 0),
-      backgroundColor: colors.slice(0, rows.length),
-      borderWidth: 0,
+      backgroundColor: PALETTE.slice(0, rows.length),
+      borderWidth: 0, hoverOffset: 6,
     }],
-  }, { plugins: { legend: { position: 'right', labels: { color: C.text } } } });
+  }, { plugins: { legend: { position: 'right', labels: {color:TICK,font:{size:11},boxWidth:10} } }, cutout:'65%' });
 }
 
 function renderSavingsChart(rows) {
-  const labels = rows.map(r => r.day.slice(5));
   mkChart('chart-savings', 'bar', {
-    labels,
+    labels: rows.map(r => r.day.slice(5)),
     datasets: [
-      { label: 'Sent', data: rows.map(r => r.input_tokens||0),
-        backgroundColor: 'rgba(108,99,255,.5)' },
-      { label: 'Saved by skim', data: rows.map(r => r.saved_tokens||0),
-        backgroundColor: 'rgba(0,212,170,.5)' },
+      { label: 'Sent',         data: rows.map(r => r.input_tokens||0), backgroundColor: P.accent+'66', borderRadius:3 },
+      { label: 'Saved by skim',data: rows.map(r => r.saved_tokens||0), backgroundColor: P.green+'88', borderRadius:3 },
     ],
   });
 }
@@ -722,15 +780,11 @@ function renderUsersChart(rows) {
     document.getElementById('team-chart-card').style.display = 'none';
     return;
   }
-  const top = rows.slice(0, 8);
   mkChart('chart-users', 'bar', {
-    labels: top.map(r => r.user_name || 'anon'),
-    datasets: [{
-      label: 'Tokens',
-      data: top.map(r => r.input_tokens || 0),
-      backgroundColor: C.accent,
-    }],
-  }, { indexAxis: 'y' });
+    labels: rows.slice(0,8).map(r => r.user_name || 'anon'),
+    datasets: [{ label:'Tokens', data:rows.slice(0,8).map(r=>r.input_tokens||0),
+      backgroundColor: P.accent+'cc', borderRadius: 3 }],
+  }, { indexAxis:'y' });
 }
 
 function renderEvents(events) {
@@ -1060,6 +1114,7 @@ async function loadSavings() {
   if (_token && await checkAuth()) {
     bootApp();
     connectSSE();
+    lucide.createIcons();
   }
 })();
 </script>

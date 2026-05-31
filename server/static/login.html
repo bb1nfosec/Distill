@@ -4,15 +4,20 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>skim — Sign in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
 <style>
-:root { --bg:#0d0f14; --surface:#161920; --border:#252832;
-        --text:#e2e4ea; --muted:#7a7f8e; --accent:#6c63ff; --danger:#ff4d6d; }
+:root { --bg:#0a0c10; --surface:#111318; --border:#1e2130; --border2:#252a3a;
+        --text:#e4e6f0; --muted:#6b7280; --accent:#6c63ff; --danger:#ff4d6d; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased;
        min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.box { background:var(--surface); border:1px solid var(--border); border-radius:16px;
-       padding:40px; width:380px; }
-h1   { font-size:22px; font-weight:700; margin-bottom:4px; }
+.box { background:var(--surface); border:1px solid var(--border2); border-radius:14px;
+       padding:40px; width:380px; box-shadow:0 4px 24px rgba(0,0,0,.5); }
+h1   { font-size:22px; font-weight:800; margin-bottom:4px; letter-spacing:-.5px; }
 .sub { color:var(--muted); font-size:13px; margin-bottom:28px; }
 .field { margin-bottom:16px; }
 .field label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; }

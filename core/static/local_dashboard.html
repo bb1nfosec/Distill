@@ -2,137 +2,281 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>skim — Local Token Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>skim — Token Dashboard</title>
+
+<!-- Inter font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+
+<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 <style>
 :root {
-  --bg:      #0d0f14; --surface: #161920; --border:  #252832;
-  --text:    #e2e4ea; --muted:   #7a7f8e; --accent:  #6c63ff;
-  --accent2: #00d4aa; --warn:    #f5a623; --danger:  #ff4d6d;
-  --success: #00d4aa; --font: 'Inter','Segoe UI',system-ui,sans-serif;
+  --bg:       #0a0c10;
+  --surface:  #111318;
+  --surface2: #161920;
+  --border:   #1e2130;
+  --border2:  #252a3a;
+  --text:     #e4e6f0;
+  --muted:    #6b7280;
+  --accent:   #6c63ff;
+  --accent2:  #00d4aa;
+  --warn:     #f5a623;
+  --danger:   #ff4d6d;
+  --success:  #00d4aa;
+  --blue:     #3b82f6;
+  --font:     'Inter', 'Segoe UI', system-ui, sans-serif;
+  --radius:   10px;
+  --shadow:   0 1px 3px rgba(0,0,0,.4), 0 1px 2px rgba(0,0,0,.3);
+  --shadow-lg:0 4px 16px rgba(0,0,0,.5);
 }
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6}
-.shell{display:flex;min-height:100vh}
-.sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);
-         display:flex;flex-direction:column;position:fixed;height:100vh;z-index:20}
-.main{margin-left:210px;flex:1;display:flex;flex-direction:column}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);
-        padding:0 24px;height:52px;display:flex;align-items:center;
-        justify-content:space-between;position:sticky;top:0;z-index:10}
-.content{padding:24px;flex:1;display:none}
-.content.active{display:block}
-.brand{padding:18px 18px 14px;border-bottom:1px solid var(--border)}
-.brand-name{font-size:20px;font-weight:700;color:var(--accent);letter-spacing:-.5px}
-.brand-tag{font-size:11px;color:var(--muted);margin-top:2px}
-.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
-          background:var(--success);margin-right:5px;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.nav{padding:10px 6px;flex:1;overflow-y:auto}
-.nav-section{color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;
-             letter-spacing:1px;padding:10px 12px 5px}
-.nav-item{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:7px;
-          color:var(--muted);cursor:pointer;transition:all .12s;margin:1px 0;
-          text-decoration:none;user-select:none}
-.nav-item:hover{background:rgba(108,99,255,.1);color:var(--text)}
-.nav-item.active{background:rgba(108,99,255,.15);color:var(--accent)}
-.nav-icon{width:16px;text-align:center;font-size:13px}
-.sidebar-footer{padding:12px;border-top:1px solid var(--border)}
-.proxy-info{font-size:11px;color:var(--muted);line-height:1.8}
-.proxy-info code{color:var(--accent2);font-size:10px}
-.topbar-title{font-size:15px;font-weight:600}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.period-select{background:var(--border);border:1px solid var(--border);color:var(--text);
-               padding:5px 9px;border-radius:6px;font-size:12px;cursor:pointer}
-.btn{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;
-     border:none;transition:all .12s}
-.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
-.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
-.live-badge{background:rgba(0,212,170,.12);color:var(--success);border:1px solid rgba(0,212,170,.3);
-            padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+/* Layout */
+.shell   { display: flex; min-height: 100vh; }
+.sidebar { width: 216px; background: var(--surface); border-right: 1px solid var(--border);
+           display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 30; }
+.main    { margin-left: 216px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar  { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 0 24px; height: 54px; display: flex; align-items: center;
+           justify-content: space-between; position: sticky; top: 0; z-index: 20;
+           backdrop-filter: blur(12px); }
+.content { padding: 24px; flex: 1; display: none; }
+.content.active { display: block; }
+
+/* Brand */
+.brand { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+.brand-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.brand-icon { width: 28px; height: 28px; background: var(--accent);
+              border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+.brand-icon svg { width: 16px; height: 16px; color: #fff; }
+.brand-name { font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -.5px; }
+.brand-tag  { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px;
+              padding-left: 2px; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success);
+            animation: blink 2s ease-in-out infinite; flex-shrink: 0; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Nav */
+.nav { padding: 10px 8px; flex: 1; overflow-y: auto; }
+.nav-section { color: var(--muted); font-size: 10px; font-weight: 700;
+               text-transform: uppercase; letter-spacing: 1px;
+               padding: 12px 10px 5px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px;
+            border-radius: 7px; color: var(--muted); cursor: pointer;
+            transition: background .12s, color .12s; margin: 1px 0;
+            font-size: 13px; font-weight: 500; user-select: none; }
+.nav-item:hover { background: rgba(108,99,255,.08); color: var(--text); }
+.nav-item.active { background: rgba(108,99,255,.14); color: var(--accent); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; stroke-width: 2; }
+
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid var(--border); }
+.footer-info { font-size: 11px; color: var(--muted); line-height: 1.8; }
+.footer-info code { color: var(--accent2); font-size: 10.5px; font-family: 'Menlo','Consolas',monospace; }
+
+/* Topbar */
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-size: 15px; font-weight: 700; letter-spacing: -.2px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.period-select { background: var(--surface2); border: 1px solid var(--border2);
+                 color: var(--text); padding: 6px 10px; border-radius: 7px;
+                 font-size: 12px; font-family: var(--font); cursor: pointer; }
+.btn { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 7px;
+       font-size: 12px; font-weight: 500; font-family: var(--font);
+       cursor: pointer; border: none; transition: all .12s; }
+.btn svg { width: 13px; height: 13px; }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
+.btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+.live-pill { display: flex; align-items: center; gap: 5px; background: rgba(0,212,170,.1);
+             color: var(--success); border: 1px solid rgba(0,212,170,.25);
+             padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;
+             animation: pill-pulse 2.5s ease-in-out infinite; }
+.live-pill svg { width: 12px; height: 12px; }
+@keyframes pill-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,212,170,.2); }
+  50%      { box-shadow: 0 0 0 5px rgba(0,212,170,0); }
+}
+.live-pill.offline { background: rgba(107,114,128,.1); color: var(--muted);
+                     border-color: rgba(107,114,128,.2); animation: none; }
+
 /* Cards */
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
-.card-label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;
-            letter-spacing:.5px;margin-bottom:6px}
-.card-value{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-1px}
-.card-sub{font-size:11px;margin-top:5px;color:var(--muted)}
-.card-sub.good{color:var(--success)} .card-sub.bad{color:var(--danger)}
-.card-icon{float:right;font-size:22px;opacity:.45}
-.hbar{height:5px;border-radius:3px;background:var(--border);margin-top:8px}
-.hbar-fill{height:100%;border-radius:3px;transition:width .6s}
-.hbar-fill.green{background:var(--success)} .hbar-fill.warn{background:var(--warn)} .hbar-fill.red{background:var(--danger)}
+.cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 20px; }
+.card  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+         padding: 20px; transition: border-color .2s, box-shadow .2s; position: relative; overflow: hidden; }
+.card::before { content: ''; position: absolute; inset: 0; opacity: 0;
+                background: radial-gradient(circle at top right, rgba(108,99,255,.08), transparent 70%);
+                transition: opacity .2s; pointer-events: none; }
+.card:hover { border-color: var(--border2); box-shadow: var(--shadow-lg); }
+.card:hover::before { opacity: 1; }
+.card-a { border-color: rgba(108,99,255,.22); }
+.card-b { border-color: rgba(245,166,35,.18); }
+.card-c { border-color: rgba(0,212,170,.2); }
+.card-d { border-color: rgba(59,130,246,.18); }
+.card-icon { float: right; width: 36px; height: 36px; border-radius: 9px;
+             display: flex; align-items: center; justify-content: center; margin-left: 8px; }
+.card-icon svg { width: 18px; height: 18px; stroke-width: 1.8; }
+.card-a .card-icon { background: rgba(108,99,255,.12); color: var(--accent); }
+.card-b .card-icon { background: rgba(245,166,35,.1);  color: var(--warn);   }
+.card-c .card-icon { background: rgba(0,212,170,.1);   color: var(--success); }
+.card-d .card-icon { background: rgba(59,130,246,.1);  color: var(--blue);   }
+.card-label { color: var(--muted); font-size: 11px; font-weight: 600;
+              text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+.card-value { font-size: 28px; font-weight: 800; letter-spacing: -1.5px;
+              color: var(--text); line-height: 1; }
+.card-sub   { font-size: 12px; margin-top: 7px; color: var(--muted); font-weight: 500; }
+.card-sub.good { color: var(--success); }
+.card-sub.warn { color: var(--warn); }
+.hbar       { height: 3px; border-radius: 99px; background: var(--border); margin-top: 10px; overflow: hidden; }
+.hbar-fill  { height: 100%; border-radius: 99px; transition: width .6s ease; }
+.hbar-fill.green  { background: var(--success); }
+.hbar-fill.yellow { background: var(--warn); }
+.hbar-fill.red    { background: var(--danger); }
+
 /* Charts */
-.charts{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px}
-.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-.chart-wrap{position:relative;height:200px}
+.charts   { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 16px; }
+.charts-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+              padding: 20px; transition: border-color .2s; }
+.chart-card:hover { border-color: var(--border2); }
+.chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.chart-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.chart-sub   { font-size: 11px; color: var(--muted); }
+.chart-wrap  { position: relative; height: 190px; }
+
 /* Table */
-.table-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.table-header{padding:14px 18px;border-bottom:1px solid var(--border);
-              display:flex;justify-content:space-between;align-items:center}
-.table-title{font-size:13px;font-weight:600}
-table{width:100%;border-collapse:collapse}
-th,td{padding:9px 18px;text-align:left;border-bottom:1px solid var(--border)}
-th{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
-td{font-size:12px}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,.018)}
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+              overflow: hidden; margin-bottom: 16px; }
+.table-head { padding: 14px 18px; border-bottom: 1px solid var(--border);
+              display: flex; align-items: center; justify-content: space-between; }
+.table-title { font-size: 13px; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; }
+th { padding: 9px 18px; text-align: left; font-size: 10px; font-weight: 700;
+     color: var(--muted); text-transform: uppercase; letter-spacing: .6px;
+     border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 9px 18px; font-size: 12px; font-weight: 500;
+     border-bottom: 1px solid rgba(255,255,255,.03); }
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background .1s; }
+tbody tr:hover td { background: rgba(255,255,255,.02); }
+
 /* Badges */
-.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
-.badge-green{background:rgba(0,212,170,.12);color:var(--success)}
-.badge-red{background:rgba(255,77,109,.12);color:var(--danger)}
-.badge-blue{background:rgba(108,99,255,.12);color:var(--accent)}
-.badge-warn{background:rgba(245,166,35,.12);color:var(--warn)}
-.badge-muted{background:rgba(122,127,142,.1);color:var(--muted)}
-/* Empty state */
-.empty{text-align:center;padding:48px 24px;color:var(--muted)}
-.empty h3{font-size:16px;color:var(--text);margin-bottom:8px}
-.empty p{font-size:13px;line-height:1.8}
-.empty code{color:var(--accent2)}
-/* Savings big number */
-.big-metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-            padding:28px;text-align:center;margin-bottom:20px}
-.big-num{font-size:52px;font-weight:800;letter-spacing:-2px;color:var(--success)}
-.big-label{font-size:14px;color:var(--muted);margin-top:4px}
+.badge { display: inline-flex; align-items: center; gap: 4px;
+         padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 700;
+         white-space: nowrap; }
+.badge svg { width: 10px; height: 10px; }
+.badge-green  { background: rgba(0,212,170,.12); color: var(--success); }
+.badge-red    { background: rgba(255,77,109,.12); color: var(--danger); }
+.badge-blue   { background: rgba(108,99,255,.12); color: var(--accent); }
+.badge-warn   { background: rgba(245,166,35,.12); color: var(--warn); }
+.badge-muted  { background: rgba(107,114,128,.1); color: var(--muted); }
+
+/* Savings big numbers */
+.big-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 16px; }
+.big-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 28px 20px; text-align: center; transition: border-color .2s; }
+.big-card:hover { border-color: var(--border2); }
+.big-num { font-size: 44px; font-weight: 800; letter-spacing: -2px; line-height: 1; }
+.big-label { font-size: 12px; color: var(--muted); margin-top: 8px; font-weight: 500; }
+.big-green { color: var(--success); }
+.big-accent { color: var(--accent); }
+
 /* Search */
-.search-bar{display:flex;gap:10px;margin-bottom:16px;align-items:center}
-.search-bar input{flex:1;background:var(--surface);border:1px solid var(--border);
-                  color:var(--text);padding:8px 12px;border-radius:7px;font-size:13px}
-.search-bar input:focus{outline:none;border-color:var(--accent)}
+.filter-bar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
+.filter-bar input { flex: 1; background: var(--surface); border: 1px solid var(--border2);
+                    color: var(--text); padding: 8px 12px; border-radius: 7px;
+                    font-size: 13px; font-family: var(--font); }
+.filter-bar input:focus { outline: none; border-color: var(--accent); }
+.filter-bar input::placeholder { color: var(--muted); }
+
+/* Empty state */
+.empty { text-align: center; padding: 56px 24px; color: var(--muted); }
+.empty-icon { width: 44px; height: 44px; margin: 0 auto 16px;
+              background: var(--surface2); border-radius: 12px;
+              display: flex; align-items: center; justify-content: center; }
+.empty-icon svg { width: 22px; height: 22px; color: var(--muted); }
+.empty h3 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty p { font-size: 12px; line-height: 1.9; }
+.empty code { color: var(--accent2); font-family: 'Menlo','Consolas',monospace; font-size: 11.5px; }
+
 /* Toast */
-#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--accent);
-       color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;
-       display:none;z-index:999;animation:slidein .2s ease}
-@keyframes slidein{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+#toast { position: fixed; bottom: 24px; right: 24px; z-index: 999;
+         background: var(--surface2); border: 1px solid var(--accent);
+         color: var(--text); padding: 10px 16px 10px 12px; border-radius: 9px;
+         font-size: 12px; font-weight: 500; display: none;
+         box-shadow: var(--shadow-lg); max-width: 320px;
+         display: flex; align-items: center; gap: 8px; opacity: 0;
+         transition: opacity .2s; pointer-events: none; }
+#toast.show { opacity: 1; }
+#toast svg { width: 14px; height: 14px; color: var(--accent2); flex-shrink: 0; }
+
 /* Responsive */
-@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts{grid-template-columns:1fr}}
-@media(max-width:700px){.sidebar{width:0;overflow:hidden}.main{margin-left:0}.cards{grid-template-columns:1fr}}
+@media (max-width: 1200px) { .cards { grid-template-columns: repeat(2,1fr); } .charts { grid-template-columns: 1fr; } }
+@media (max-width: 768px)  { .sidebar { width: 0; overflow: hidden; } .main { margin-left: 0; } .cards { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px)  { .cards { grid-template-columns: 1fr; } .big-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="shell">
+
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="brand">
-      <div class="brand-name">skim</div>
-      <div class="brand-tag"><span class="live-dot"></span>Local Proxy Dashboard</div>
+      <div class="brand-logo">
+        <div class="brand-icon"><i data-lucide="zap"></i></div>
+        <span class="brand-name">skim</span>
+      </div>
+      <div class="brand-tag">
+        <span class="live-dot"></span>
+        Local proxy dashboard
+      </div>
     </div>
+
     <div class="nav">
       <div class="nav-section">Monitor</div>
-      <div class="nav-item active" onclick="nav('overview')"><span class="nav-icon">◈</span> Overview</div>
-      <div class="nav-item" onclick="nav('sessions')"><span class="nav-icon">⚡</span> Sessions</div>
+      <div class="nav-item active" onclick="nav('overview',this)">
+        <i data-lucide="layout-dashboard"></i> Overview
+      </div>
+      <div class="nav-item" onclick="nav('sessions',this)">
+        <i data-lucide="activity"></i> Sessions
+      </div>
       <div class="nav-section">Analyse</div>
-      <div class="nav-item" onclick="nav('usage')"><span class="nav-icon">📊</span> Usage</div>
-      <div class="nav-item" onclick="nav('models')"><span class="nav-icon">🤖</span> Models</div>
-      <div class="nav-item" onclick="nav('savings')"><span class="nav-icon">💰</span> Savings</div>
+      <div class="nav-item" onclick="nav('usage',this)">
+        <i data-lucide="bar-chart-2"></i> Usage
+      </div>
+      <div class="nav-item" onclick="nav('models',this)">
+        <i data-lucide="cpu"></i> Models
+      </div>
+      <div class="nav-item" onclick="nav('savings',this)">
+        <i data-lucide="piggy-bank"></i> Savings
+      </div>
     </div>
+
     <div class="sidebar-footer">
-      <div class="proxy-info">
-        Proxy: <code id="proxy-url">—</code><br>
-        DB: <code>~/.skim/events.db</code>
+      <div class="footer-info">
+        Proxy&nbsp;<code id="proxy-url">localhost:7474</code><br>
+        Store&nbsp;<code>~/.skim/events.db</code>
       </div>
     </div>
   </nav>
@@ -140,7 +284,9 @@ tr:hover td{background:rgba(255,255,255,.018)}
   <!-- Main -->
   <div class="main">
     <div class="topbar">
-      <div class="topbar-title" id="page-title">Overview</div>
+      <div class="topbar-left">
+        <div class="topbar-title" id="page-title">Overview</div>
+      </div>
       <div class="topbar-right">
         <select class="period-select" id="period" onchange="reload()">
           <option value="1">Today</option>
@@ -148,77 +294,91 @@ tr:hover td{background:rgba(255,255,255,.018)}
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
         </select>
-        <div class="live-badge" id="sse-badge">● LIVE</div>
-        <button class="btn btn-ghost" onclick="reload()">↻ Refresh</button>
+        <div class="live-pill" id="sse-pill">
+          <i data-lucide="radio"></i> LIVE
+        </div>
+        <button class="btn btn-ghost" onclick="reload()">
+          <i data-lucide="refresh-cw"></i> Refresh
+        </button>
       </div>
     </div>
 
-    <!-- OVERVIEW -->
+    <!-- ── OVERVIEW ───────────────────────────────────── -->
     <div class="content active" id="page-overview">
+
       <div class="cards">
-        <div class="card">
-          <div class="card-icon">📤</div>
+        <div class="card card-a">
+          <div class="card-icon"><i data-lucide="send"></i></div>
           <div class="card-label">Tokens Sent</div>
           <div class="card-value" id="c-input">—</div>
-          <div class="card-sub" id="c-calls">— calls</div>
+          <div class="card-sub" id="c-calls">— API calls</div>
+          <div class="hbar"><div class="hbar-fill green" id="c-ctx-bar" style="width:0%"></div></div>
         </div>
-        <div class="card">
-          <div class="card-icon">💵</div>
-          <div class="card-label">Est. Cost</div>
+        <div class="card card-b">
+          <div class="card-icon"><i data-lucide="dollar-sign"></i></div>
+          <div class="card-label">Estimated Cost</div>
           <div class="card-value" id="c-cost">—</div>
-          <div class="card-sub" id="c-avg-cost">—/call avg</div>
+          <div class="card-sub" id="c-avg-cost">— avg / call</div>
         </div>
-        <div class="card">
-          <div class="card-icon">✂️</div>
+        <div class="card card-c">
+          <div class="card-icon"><i data-lucide="scissors"></i></div>
           <div class="card-label">Tokens Saved</div>
           <div class="card-value" id="c-saved">—</div>
           <div class="card-sub good" id="c-save-pct">— reduction</div>
         </div>
-        <div class="card">
-          <div class="card-icon">⚡</div>
+        <div class="card card-d">
+          <div class="card-icon"><i data-lucide="bolt"></i></div>
           <div class="card-label">Cache Hits</div>
           <div class="card-value" id="c-cached">—</div>
           <div class="card-sub" id="c-cache-pct">— of input</div>
         </div>
       </div>
+
       <div class="charts">
         <div class="chart-card">
-          <div class="chart-title">Token Usage Over Time</div>
+          <div class="chart-head">
+            <div>
+              <div class="chart-title">Token Usage Over Time</div>
+              <div class="chart-sub" id="ov-usage-sub">—</div>
+            </div>
+          </div>
           <div class="chart-wrap"><canvas id="ch-usage"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">By Model</div>
+          <div class="chart-head"><div class="chart-title">By Model</div></div>
           <div class="chart-wrap"><canvas id="ch-model"></canvas></div>
         </div>
       </div>
+
       <div class="charts-2">
         <div class="chart-card">
-          <div class="chart-title">Sent vs Saved</div>
+          <div class="chart-head"><div class="chart-title">Sent vs Saved</div></div>
           <div class="chart-wrap"><canvas id="ch-savings"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Cost Per Day</div>
+          <div class="chart-head"><div class="chart-title">Cost Per Day ($)</div></div>
           <div class="chart-wrap"><canvas id="ch-cost"></canvas></div>
         </div>
       </div>
+
       <div class="table-card">
-        <div class="table-header">
+        <div class="table-head">
           <div class="table-title">Recent API Calls</div>
           <span class="badge badge-blue" id="c-events-count">—</span>
         </div>
         <table>
           <thead><tr>
             <th>Time</th><th>Model</th><th>Provider</th>
-            <th>In</th><th>Out</th><th>Saved</th><th>Cached</th><th>Cost</th><th>Latency</th>
+            <th>In</th><th>Out</th><th>Saved</th><th>Cached</th><th>Cost</th><th>Latency</th><th>Plan</th>
           </tr></thead>
           <tbody id="overview-events"></tbody>
         </table>
       </div>
-    </div>
+    </div><!-- /overview -->
 
-    <!-- SESSIONS -->
+    <!-- ── SESSIONS ───────────────────────────────────── -->
     <div class="content" id="page-sessions">
-      <div class="search-bar">
+      <div class="filter-bar">
         <input type="text" id="session-search" placeholder="Filter by model or provider…" oninput="filterSessions()"/>
         <select class="period-select" id="session-period" onchange="loadSessions()">
           <option value="1">Today</option>
@@ -228,14 +388,14 @@ tr:hover td{background:rgba(255,255,255,.018)}
         </select>
       </div>
       <div class="table-card">
-        <div class="table-header">
+        <div class="table-head">
           <div class="table-title">All API Calls</div>
           <span class="badge badge-blue" id="session-count">—</span>
         </div>
         <table>
           <thead><tr>
             <th>#</th><th>Timestamp (UTC)</th><th>Provider</th><th>Model</th>
-            <th>Tokens In</th><th>Tokens Out</th><th>Saved</th><th>Cached</th>
+            <th>In</th><th>Out</th><th>Saved</th><th>Cached</th>
             <th>Cost</th><th>Latency</th><th>Plan</th>
           </tr></thead>
           <tbody id="sessions-table"></tbody>
@@ -243,214 +403,300 @@ tr:hover td{background:rgba(255,255,255,.018)}
       </div>
     </div>
 
-    <!-- USAGE -->
+    <!-- ── USAGE ──────────────────────────────────────── -->
     <div class="content" id="page-usage">
       <div class="charts">
         <div class="chart-card">
-          <div class="chart-title">
-            Hourly Activity
+          <div class="chart-head">
+            <div class="chart-title">Hourly Activity</div>
             <select class="period-select" id="hour-period" onchange="loadUsage()" style="font-size:11px">
               <option value="1">Today</option>
-              <option value="3">Last 3 days</option>
-              <option value="7" selected>Last 7 days</option>
+              <option value="3">3 days</option>
+              <option value="7" selected>7 days</option>
             </select>
           </div>
           <div class="chart-wrap"><canvas id="ch-hourly"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Daily Calls</div>
+          <div class="chart-head"><div class="chart-title">Daily Calls</div></div>
           <div class="chart-wrap"><canvas id="ch-daily-calls"></canvas></div>
         </div>
       </div>
       <div class="table-card">
-        <div class="table-header">
-          <div class="table-title">Daily Breakdown</div>
-        </div>
+        <div class="table-head"><div class="table-title">Daily Breakdown</div></div>
         <table>
           <thead><tr>
-            <th>Date</th><th>Calls</th><th>Tokens In</th><th>Tokens Saved</th>
-            <th>Cache Hits</th><th>Cost</th><th>Save %</th>
+            <th>Date</th><th>Calls</th><th>Tokens In</th>
+            <th>Tokens Saved</th><th>Cache Hits</th><th>Cost</th><th>Save %</th>
           </tr></thead>
           <tbody id="usage-table"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- MODELS -->
+    <!-- ── MODELS ─────────────────────────────────────── -->
     <div class="content" id="page-models">
-      <div class="charts-2" style="margin-bottom:20px">
+      <div class="charts-2" style="margin-bottom:16px">
         <div class="chart-card">
-          <div class="chart-title">Token Distribution by Model</div>
+          <div class="chart-head"><div class="chart-title">Token Distribution</div></div>
           <div class="chart-wrap"><canvas id="ch-model-dist"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Cost by Model</div>
+          <div class="chart-head"><div class="chart-title">Cost Distribution</div></div>
           <div class="chart-wrap"><canvas id="ch-model-cost"></canvas></div>
         </div>
       </div>
       <div class="table-card">
-        <div class="table-header">
-          <div class="table-title">Model Comparison</div>
-        </div>
+        <div class="table-head"><div class="table-title">Model Comparison</div></div>
         <table>
           <thead><tr>
             <th>Model</th><th>Provider</th><th>Calls</th>
             <th>Tokens In</th><th>Tokens Out</th><th>Cost</th>
-            <th>Cost/1k In</th><th>Cache Hit %</th><th>Waste %</th><th>Avg Latency</th>
+            <th>$/1k In</th><th>Cache Hit %</th><th>Waste %</th><th>Avg Latency</th>
           </tr></thead>
           <tbody id="models-table"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- SAVINGS -->
+    <!-- ── SAVINGS ────────────────────────────────────── -->
     <div class="content" id="page-savings">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px">
-        <div class="big-metric">
-          <div class="big-num" id="sv-tokens">—</div>
-          <div class="big-label">Total Tokens Saved by skim</div>
+      <div class="big-grid">
+        <div class="big-card">
+          <div class="big-num big-green" id="sv-tokens">—</div>
+          <div class="big-label">Total Tokens Saved</div>
         </div>
-        <div class="big-metric">
-          <div class="big-num" id="sv-usd">—</div>
+        <div class="big-card">
+          <div class="big-num big-green" id="sv-usd">—</div>
           <div class="big-label">Estimated $ Saved</div>
         </div>
-        <div class="big-metric">
-          <div class="big-num" id="sv-cache-usd">—</div>
-          <div class="big-label">Saved via Cache Hits</div>
+        <div class="big-card">
+          <div class="big-num big-accent" id="sv-cache-tok">—</div>
+          <div class="big-label">Tokens Served from Cache</div>
         </div>
       </div>
       <div class="charts">
         <div class="chart-card">
-          <div class="chart-title">Cumulative Savings Over Time</div>
+          <div class="chart-head"><div class="chart-title">Cumulative Savings</div></div>
           <div class="chart-wrap"><canvas id="ch-cumulative"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Daily Save Rate (%)</div>
+          <div class="chart-head"><div class="chart-title">Daily Save Rate (%)</div></div>
           <div class="chart-wrap"><canvas id="ch-save-rate"></canvas></div>
         </div>
       </div>
       <div class="charts-2">
         <div class="chart-card">
-          <div class="chart-title">Tokens: Sent vs Saved vs Cached</div>
+          <div class="chart-head"><div class="chart-title">Sent / Saved / Cached</div></div>
           <div class="chart-wrap"><canvas id="ch-breakdown"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-title">Savings by Model</div>
+          <div class="chart-head"><div class="chart-title">Savings by Model</div></div>
           <div class="chart-wrap"><canvas id="ch-model-save"></canvas></div>
         </div>
       </div>
     </div>
 
   </div><!-- /main -->
+</div><!-- /shell -->
+
+<div id="toast">
+  <i data-lucide="arrow-up-right"></i>
+  <span id="toast-msg"></span>
 </div>
 
-<div id="toast"></div>
-
 <script>
-const BASE = window.location.origin;
-let _days = 7;
-let _charts = {};
-let _allSessions = [];
-let _sse = null;
+// ── Init Lucide icons ────────────────────────────────────────────────────────
+lucide.createIcons();
 
-// ── Colours ────────────────────────────────────────────────────────────────
-const C = {
+const BASE = window.location.origin;
+let _days = 7, _charts = {}, _allSessions = [], _sse = null;
+document.getElementById('proxy-url').textContent = window.location.host;
+
+// ── Palette ──────────────────────────────────────────────────────────────────
+const P = {
   accent:'#6c63ff', green:'#00d4aa', warn:'#f5a623', red:'#ff4d6d',
   blue:'#3b82f6', purple:'#a78bfa', orange:'#fb923c',
-  grid:'rgba(255,255,255,.04)', text:'#7a7f8e',
 };
-const PALETTE = [C.accent, C.green, C.warn, C.red, C.blue, C.purple, C.orange];
+const PALETTE = [P.accent, P.green, P.warn, P.red, P.blue, P.purple, P.orange];
+const GRID   = 'rgba(255,255,255,.04)';
+const LABELS = '#6b7280';
 
-// ── Nav ────────────────────────────────────────────────────────────────────
-const PAGES = ['overview','sessions','usage','models','savings'];
-function nav(name) {
-  PAGES.forEach(p => {
-    const el = document.getElementById('page-'+p);
-    if (el) el.classList.toggle('active', p === name);
+// ── Chart defaults ───────────────────────────────────────────────────────────
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+Chart.defaults.animation.duration = 500;
+Chart.defaults.plugins.legend.labels.usePointStyle = true;
+Chart.defaults.plugins.legend.labels.pointStyleWidth = 8;
+
+function chartGradient(ctx, color, alpha = .3) {
+  const {chartArea} = ctx.chart;
+  if (!chartArea) return 'transparent';
+  const g = ctx.chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+  g.addColorStop(0, color + Math.round(alpha*255).toString(16).padStart(2,'0'));
+  g.addColorStop(1, color + '00');
+  return g;
+}
+
+const baseScales = {
+  x: { grid: {color: GRID}, ticks: {color: LABELS, font:{size:10}} },
+  y: { grid: {color: GRID}, ticks: {color: LABELS, font:{size:10}, callback: v => fmtN(v)} },
+};
+
+function mkChart(id, type, data, extra = {}) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (_charts[id]) _charts[id].destroy();
+  _charts[id] = new Chart(el, {
+    type,
+    data,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          labels: { color: LABELS, font: {size:11}, boxWidth: 10 },
+        },
+        tooltip: {
+          backgroundColor: '#1e2130',
+          borderColor: '#252a3a',
+          borderWidth: 1,
+          titleColor: '#e4e6f0',
+          bodyColor: '#9ca3af',
+          padding: 10,
+          cornerRadius: 8,
+        },
+      },
+      scales: type !== 'doughnut' && type !== 'pie' ? baseScales : undefined,
+      ...extra,
+    },
   });
-  document.querySelectorAll('.nav-item').forEach((el,i) => el.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  const titles = {overview:'Overview',sessions:'Sessions',usage:'Usage',
-                  models:'Models',savings:'Savings'};
-  document.getElementById('page-title').textContent = titles[name] || name;
+}
+
+// ── Formatters ────────────────────────────────────────────────────────────────
+function fmtN(n) {
+  n = n || 0;
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+  return String(Math.round(n));
+}
+function fmtCost(v) {
+  if (!v) return '$0.00';
+  return v < 0.001 ? `$${v.toFixed(4)}` : `$${v.toFixed(3)}`;
+}
+function fmtTs(ts) {
+  if (!ts) return '—';
+  return ts.replace('T',' ').slice(0,19);
+}
+function fmtAgo(ts) {
+  if (!ts) return '—';
+  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (diff < 60)  return `${Math.round(diff)}s ago`;
+  if (diff < 3600) return `${Math.round(diff/60)}m ago`;
+  return ts.slice(11,19);
+}
+
+// ── Number animation ──────────────────────────────────────────────────────────
+function animNum(el, to, fmt = fmtN) {
+  if (!el) return;
+  const start = performance.now();
+  const dur = 600;
+  const tick = now => {
+    const p    = Math.min((now - start) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(Math.round(to * ease));
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path) {
+  try {
+    const r = await fetch(BASE + path);
+    return r.ok ? r.json() : null;
+  } catch { return null; }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ── SSE ───────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (_sse) { _sse.close(); _sse = null; }
+  _sse = new EventSource(BASE + '/skim/stream');
+  _sse.onmessage = e => {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'event') {
+        toast(`${ev.model || 'call'} — in:${fmtN(ev.input_tokens)} saved:${fmtN(ev.saved_tokens)}`);
+        setTimeout(reload, 500);
+      }
+    } catch {}
+  };
+  _sse.onopen = () => {
+    const p = document.getElementById('sse-pill');
+    p.className = 'live-pill';
+    p.innerHTML = '<i data-lucide="radio"></i> LIVE';
+    lucide.createIcons({ nodes: [p] });
+  };
+  _sse.onerror = () => {
+    const p = document.getElementById('sse-pill');
+    p.className = 'live-pill offline';
+    p.innerHTML = '<i data-lucide="wifi-off"></i> offline';
+    lucide.createIcons({ nodes: [p] });
+    setTimeout(connectSSE, 12000);
+  };
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+const PAGES = ['overview','sessions','usage','models','savings'];
+const TITLES = {overview:'Overview',sessions:'Sessions',usage:'Usage',models:'Models',savings:'Savings'};
+
+function nav(name, el) {
+  PAGES.forEach(p => {
+    const pg = document.getElementById('page-'+p);
+    if (pg) pg.classList.toggle('active', p === name);
+  });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('page-title').textContent = TITLES[name] || name;
   if (name === 'sessions') loadSessions();
   if (name === 'usage')    loadUsage();
   if (name === 'models')   loadModels();
   if (name === 'savings')  loadSavings();
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function fmtN(n) {
-  n = n||0;
-  if (n>=1e6) return (n/1e6).toFixed(1)+'M';
-  if (n>=1e3) return (n/1e3).toFixed(1)+'k';
-  return String(Math.round(n));
-}
-function fmtCost(v) {
-  if (!v || v===0) return '$0.00';
-  return v < 0.001 ? `$${v.toFixed(4)}` : `$${v.toFixed(3)}`;
-}
-function fmtTime(ts) {
-  if (!ts) return '—';
-  return ts.replace('T',' ').slice(0,19);
+function reload() {
+  _days = parseInt(document.getElementById('period').value);
+  const active = document.querySelector('.content.active');
+  if (!active) return;
+  const name = active.id.replace('page-','');
+  if (name === 'overview')  loadOverview();
+  if (name === 'sessions')  loadSessions();
+  if (name === 'usage')     loadUsage();
+  if (name === 'models')    loadModels();
+  if (name === 'savings')   loadSavings();
 }
 
-async function api(path) {
-  try {
-    const r = await fetch(BASE + path);
-    if (!r.ok) return null;
-    return r.json();
-  } catch { return null; }
+// ── Empty state helper ────────────────────────────────────────────────────────
+function emptyRow(cols, icon, title, detail) {
+  return `<tr><td colspan="${cols}">
+    <div class="empty">
+      <div class="empty-icon"><i data-lucide="${icon}"></i></div>
+      <h3>${title}</h3>
+      <p>${detail}</p>
+    </div>
+  </td></tr>`;
 }
 
-function mkChart(id, type, data, opts={}) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (_charts[id]) _charts[id].destroy();
-  _charts[id] = new Chart(el, { type, data, options: {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ labels:{ color:C.text, font:{size:11}, boxWidth:12 } } },
-    scales: type!=='doughnut' && type!=='pie' ? {
-      x:{ grid:{color:C.grid}, ticks:{color:C.text, font:{size:10}} },
-      y:{ grid:{color:C.grid}, ticks:{color:C.text, font:{size:10},
-          callback:v=>fmtN(v)} },
-    } : undefined,
-    ...opts,
-  }});
-}
-
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.style.display = 'block';
-  setTimeout(() => t.style.display='none', 2500);
-}
-
-// ── SSE ────────────────────────────────────────────────────────────────────
-function connectSSE() {
-  if (_sse) { _sse.close(); _sse=null; }
-  _sse = new EventSource(BASE + '/skim/stream');
-  _sse.onmessage = e => {
-    try {
-      const ev = JSON.parse(e.data);
-      if (ev.type === 'event') {
-        toast(`↻ ${ev.model || 'call'} — in:${fmtN(ev.input_tokens)} saved:${fmtN(ev.saved_tokens)}`);
-        setTimeout(reload, 400);
-      }
-    } catch {}
-  };
-  _sse.onopen = () => {
-    document.getElementById('sse-badge').textContent = '● LIVE';
-    document.getElementById('sse-badge').style.color = 'var(--success)';
-  };
-  _sse.onerror = () => {
-    document.getElementById('sse-badge').textContent = '○ offline';
-    document.getElementById('sse-badge').style.color = 'var(--muted)';
-    setTimeout(connectSSE, 10000);
-  };
-}
-
-// ── Overview ───────────────────────────────────────────────────────────────
+// ── Overview ──────────────────────────────────────────────────────────────────
 async function loadOverview() {
   const [sum, daily, models, events] = await Promise.all([
     api(`/skim/data/summary?days=${_days}`),
@@ -458,33 +704,47 @@ async function loadOverview() {
     api(`/skim/data/models?days=${_days}`),
     api(`/skim/data/events?days=${_days}&limit=25`),
   ]);
-  if (sum)    renderSummaryCards(sum);
+  if (sum)    renderCards(sum);
   if (daily)  { renderUsageChart(daily); renderSavingsChart(daily); renderCostChart(daily); }
   if (models) renderModelDonut(models);
-  if (events) renderOverviewEvents(events);
+  if (events) renderOverviewTable(events);
+
+  if (daily) {
+    const total = daily.reduce((s,r)=>s+(r.input_tokens||0),0);
+    document.getElementById('ov-usage-sub').textContent =
+      `${fmtN(total)} total over ${daily.length} day${daily.length!==1?'s':''}`;
+  }
 }
 
-function renderSummaryCards(s) {
-  document.getElementById('c-input').textContent    = fmtN(s.total_input);
-  document.getElementById('c-calls').textContent    = `${s.total_calls||0} calls`;
+function renderCards(s) {
+  animNum(document.getElementById('c-input'),  s.total_input || 0);
+  animNum(document.getElementById('c-saved'),  s.total_saved || 0);
+  animNum(document.getElementById('c-cached'), s.total_cached || 0);
+  document.getElementById('c-calls').textContent    = `${s.total_calls||0} API calls`;
   document.getElementById('c-cost').textContent     = fmtCost(s.total_cost);
-  const avg = s.total_calls ? (s.total_cost/s.total_calls) : 0;
-  document.getElementById('c-avg-cost').textContent = `${fmtCost(avg)}/call`;
-  document.getElementById('c-saved').textContent    = fmtN(s.total_saved);
+  const avg = s.total_calls ? s.total_cost / s.total_calls : 0;
+  document.getElementById('c-avg-cost').textContent = `${fmtCost(avg)} avg / call`;
   const sp = s.total_input ? ((s.total_saved||0)/s.total_input*100).toFixed(1) : 0;
-  document.getElementById('c-save-pct').textContent = `${sp}% reduction`;
-  document.getElementById('c-cached').textContent   = fmtN(s.total_cached);
+  document.getElementById('c-save-pct').textContent  = `${sp}% reduction`;
   const cp = s.total_input ? ((s.total_cached||0)/s.total_input*100).toFixed(1) : 0;
   document.getElementById('c-cache-pct').textContent = `${cp}% of input`;
+  // context bar (rough: 200k limit)
+  const pct = Math.min((s.avg_input||0)/200000*100, 100);
+  const bar = document.getElementById('c-ctx-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'hbar-fill ' + (pct>80?'red':pct>50?'yellow':'green');
 }
 
 function renderUsageChart(rows) {
   mkChart('ch-usage','line',{
     labels: rows.map(r=>r.day.slice(5)),
     datasets:[{
-      label:'Input tokens', data:rows.map(r=>r.input_tokens||0),
-      borderColor:C.accent, backgroundColor:'rgba(108,99,255,.08)',
-      fill:true, tension:.4, pointRadius:3,
+      label:'Input tokens',
+      data: rows.map(r=>r.input_tokens||0),
+      borderColor: P.accent,
+      backgroundColor: ctx => chartGradient(ctx, '#6c63ff', .28),
+      fill: true, tension: .4, pointRadius: 3, pointHoverRadius: 5,
+      borderWidth: 2,
     }],
   });
 }
@@ -495,67 +755,78 @@ function renderModelDonut(models) {
     labels: models.map(m=>m.model),
     datasets:[{
       data: models.map(m=>m.input_tokens||0),
-      backgroundColor: PALETTE.slice(0,models.length), borderWidth:0,
+      backgroundColor: PALETTE.slice(0,models.length),
+      borderWidth: 0, hoverOffset: 6,
     }],
-  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
+  },{
+    plugins:{legend:{position:'right',labels:{color:LABELS,font:{size:11},boxWidth:10}}},
+    cutout:'68%',
+  });
 }
 
 function renderSavingsChart(rows) {
   mkChart('ch-savings','bar',{
     labels: rows.map(r=>r.day.slice(5)),
     datasets:[
-      {label:'Sent',   data:rows.map(r=>r.input_tokens||0), backgroundColor:'rgba(108,99,255,.45)'},
-      {label:'Saved',  data:rows.map(r=>r.saved_tokens||0), backgroundColor:'rgba(0,212,170,.45)'},
+      {label:'Sent',  data:rows.map(r=>r.input_tokens||0), backgroundColor:P.accent+'66', borderRadius:3},
+      {label:'Saved', data:rows.map(r=>r.saved_tokens||0), backgroundColor:P.green+'88', borderRadius:3},
     ],
-  });
+  },{scales:{...baseScales,x:{...baseScales.x,stacked:false}}});
 }
 
 function renderCostChart(rows) {
   mkChart('ch-cost','line',{
     labels: rows.map(r=>r.day.slice(5)),
     datasets:[{
-      label:'Cost (USD)', data:rows.map(r=>r.cost_usd||0),
-      borderColor:C.warn, backgroundColor:'rgba(245,166,35,.08)',
-      fill:true, tension:.4, pointRadius:3,
+      label:'Cost ($)',
+      data: rows.map(r=>r.cost_usd||0),
+      borderColor: P.warn,
+      backgroundColor: ctx => chartGradient(ctx,'#f5a623',.2),
+      fill:true, tension:.4, pointRadius:3, borderWidth:2,
     }],
-  },{scales:{
-    x:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10}}},
-    y:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10},callback:v=>`$${v.toFixed(3)}`}},
-  }});
+  },{
+    scales:{
+      x:{grid:{color:GRID},ticks:{color:LABELS,font:{size:10}}},
+      y:{grid:{color:GRID},ticks:{color:LABELS,font:{size:10},callback:v=>`$${v.toFixed(3)}`}},
+    },
+  });
 }
 
-function renderOverviewEvents(events) {
+function renderOverviewTable(events) {
   document.getElementById('c-events-count').textContent = `${events.length} events`;
   const tb = document.getElementById('overview-events');
   if (!events.length) {
-    tb.innerHTML = `<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:32px">
-      No API calls yet. Set <code style="color:var(--accent2)">ANTHROPIC_BASE_URL=http://localhost:${location.port||7474}</code> and use Claude.
-    </td></tr>`;
+    tb.innerHTML = emptyRow(10,'zap','No calls yet',
+      `Set <code>ANTHROPIC_BASE_URL=http://localhost:${location.port||7474}</code> and use Claude Code.`);
+    lucide.createIcons({nodes:[tb]});
     return;
   }
   tb.innerHTML = events.map(e => {
-    const saved = e.saved_tokens||0;
-    const savedBadge = saved>0
-      ? `<span class="badge badge-green">−${fmtN(saved)}</span>`
-      : '<span style="color:var(--muted)">—</span>';
-    const cachedBadge = (e.cached_tokens||0)>0
-      ? `<span class="badge badge-blue">${fmtN(e.cached_tokens)}</span>`
-      : '<span style="color:var(--muted)">—</span>';
+    const savedB = (e.saved_tokens||0)>0
+      ? `<span class="badge badge-green">−${fmtN(e.saved_tokens)}</span>` : '—';
+    const cachB = (e.cached_tokens||0)>0
+      ? `<span class="badge badge-blue">${fmtN(e.cached_tokens)}</span>` : '—';
+    const planB = e.plan === 'apikey'
+      ? '<span class="badge badge-green">API key</span>'
+      : e.plan === 'oauth'
+      ? '<span class="badge badge-blue">Pro</span>'
+      : '<span class="badge badge-muted">—</span>';
     return `<tr>
-      <td style="color:var(--muted);white-space:nowrap">${(e.ts||'').slice(11,19)}</td>
+      <td style="color:var(--muted)">${fmtAgo(e.ts)}</td>
       <td><span class="badge badge-blue">${e.model||'—'}</span></td>
       <td style="color:var(--muted)">${e.provider||'—'}</td>
       <td>${fmtN(e.input_tokens)}</td>
       <td>${fmtN(e.output_tokens)}</td>
-      <td>${savedBadge}</td>
-      <td>${cachedBadge}</td>
+      <td>${savedB}</td>
+      <td>${cachB}</td>
       <td>${fmtCost(e.cost_usd)}</td>
       <td style="color:var(--muted)">${e.latency_ms?e.latency_ms+'ms':'—'}</td>
+      <td>${planB}</td>
     </tr>`;
   }).join('');
 }
 
-// ── Sessions ───────────────────────────────────────────────────────────────
+// ── Sessions ──────────────────────────────────────────────────────────────────
 async function loadSessions() {
   const d = parseInt(document.getElementById('session-period')?.value||'7');
   const data = await api(`/skim/data/events?days=${d}&limit=500`);
@@ -571,34 +842,35 @@ function filterSessions() {
   document.getElementById('session-count').textContent = `${rows.length} calls`;
   const tb = document.getElementById('sessions-table');
   if (!rows.length) {
-    tb.innerHTML = `<tr><td colspan="11" style="color:var(--muted);text-align:center;padding:32px">No sessions yet.</td></tr>`;
+    tb.innerHTML = emptyRow(11,'activity','No sessions yet','Make API calls through the proxy to see them here.');
+    lucide.createIcons({nodes:[tb]});
     return;
   }
   tb.innerHTML = rows.map((e,i) => {
-    const planBadge = e.plan === 'apikey'
-      ? '<span class="badge badge-green">API key</span>'
-      : e.plan === 'oauth'
-      ? '<span class="badge badge-blue">Pro/OAuth</span>'
-      : '<span class="badge badge-muted">—</span>';
-    const savedBadge = (e.saved_tokens||0)>0
+    const savedB = (e.saved_tokens||0)>0
       ? `<span class="badge badge-green">−${fmtN(e.saved_tokens)}</span>` : '—';
+    const planB = e.plan==='apikey'
+      ? '<span class="badge badge-green">API key</span>'
+      : e.plan==='oauth'
+      ? '<span class="badge badge-blue">Pro</span>'
+      : '—';
     return `<tr>
       <td style="color:var(--muted)">${i+1}</td>
-      <td style="white-space:nowrap;color:var(--muted)">${fmtTime(e.ts)}</td>
+      <td style="color:var(--muted);white-space:nowrap">${fmtTs(e.ts)}</td>
       <td style="color:var(--muted)">${e.provider||'—'}</td>
       <td><span class="badge badge-blue">${e.model||'—'}</span></td>
       <td>${fmtN(e.input_tokens)}</td>
       <td>${fmtN(e.output_tokens)}</td>
-      <td>${savedBadge}</td>
+      <td>${savedB}</td>
       <td>${(e.cached_tokens||0)>0?fmtN(e.cached_tokens):'—'}</td>
       <td>${fmtCost(e.cost_usd)}</td>
       <td style="color:var(--muted)">${e.latency_ms?e.latency_ms+'ms':'—'}</td>
-      <td>${planBadge}</td>
+      <td>${planB}</td>
     </tr>`;
   }).join('');
 }
 
-// ── Usage ──────────────────────────────────────────────────────────────────
+// ── Usage ─────────────────────────────────────────────────────────────────────
 async function loadUsage() {
   const hd = parseInt(document.getElementById('hour-period')?.value||'7');
   const [hourly, daily] = await Promise.all([
@@ -608,81 +880,72 @@ async function loadUsage() {
   if (hourly) {
     mkChart('ch-hourly','bar',{
       labels: hourly.map(r=>r.hour.slice(8)+'h'),
-      datasets:[{
-        label:'Tokens',data:hourly.map(r=>r.input_tokens||0),
-        backgroundColor:C.accent+'99',
-      }],
+      datasets:[{label:'Tokens',data:hourly.map(r=>r.input_tokens||0),
+        backgroundColor:P.accent+'99',borderRadius:3}],
     });
     mkChart('ch-daily-calls','bar',{
       labels: (daily||[]).map(r=>r.day.slice(5)),
-      datasets:[{
-        label:'API calls',data:(daily||[]).map(r=>r.calls||0),
-        backgroundColor:C.green+'99',
-      }],
+      datasets:[{label:'API calls',data:(daily||[]).map(r=>r.calls||0),
+        backgroundColor:P.green+'99',borderRadius:3}],
     });
   }
   if (daily) {
     const tb = document.getElementById('usage-table');
     tb.innerHTML = [...daily].reverse().map(r => {
       const sp = r.input_tokens ? ((r.saved_tokens||0)/r.input_tokens*100).toFixed(1) : 0;
-      const cp = r.input_tokens ? ((r.cached_tokens||0)/r.input_tokens*100).toFixed(1) : 0;
       return `<tr>
-        <td>${r.day}</td>
-        <td>${r.calls}</td>
-        <td>${fmtN(r.input_tokens)}</td>
-        <td>${fmtN(r.saved_tokens)}</td>
-        <td>${fmtN(r.cached_tokens||0)}</td>
-        <td>${fmtCost(r.cost_usd)}</td>
-        <td><span class="badge ${sp>30?'badge-green':'badge-warn'}">${sp}%</span></td>
+        <td>${r.day}</td><td>${r.calls}</td>
+        <td>${fmtN(r.input_tokens)}</td><td>${fmtN(r.saved_tokens||0)}</td>
+        <td>${fmtN(r.cached_tokens||0)}</td><td>${fmtCost(r.cost_usd)}</td>
+        <td><span class="badge ${parseFloat(sp)>30?'badge-green':'badge-warn'}">${sp}%</span></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">No data.</td></tr>`;
+    }).join('') || emptyRow(7,'bar-chart-2','No data yet','');
   }
 }
 
-// ── Models ─────────────────────────────────────────────────────────────────
+// ── Models ────────────────────────────────────────────────────────────────────
 async function loadModels() {
   const data = await api(`/skim/data/models?days=${_days}`);
   if (!data) return;
+  const donutOpts = {
+    plugins:{legend:{position:'right',labels:{color:LABELS,font:{size:11},boxWidth:10}}},
+    cutout:'65%',
+  };
   mkChart('ch-model-dist','doughnut',{
     labels: data.map(m=>m.model),
-    datasets:[{
-      data:data.map(m=>m.input_tokens||0),
-      backgroundColor:PALETTE.slice(0,data.length), borderWidth:0,
-    }],
-  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
+    datasets:[{data:data.map(m=>m.input_tokens||0),
+      backgroundColor:PALETTE.slice(0,data.length),borderWidth:0,hoverOffset:6}],
+  },donutOpts);
   mkChart('ch-model-cost','doughnut',{
     labels: data.map(m=>m.model),
-    datasets:[{
-      data:data.map(m=>m.cost_usd||0),
-      backgroundColor:PALETTE.slice(0,data.length), borderWidth:0,
-    }],
-  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
-
+    datasets:[{data:data.map(m=>m.cost_usd||0),
+      backgroundColor:PALETTE.slice(0,data.length),borderWidth:0,hoverOffset:6}],
+  },donutOpts);
   const tb = document.getElementById('models-table');
   if (!data.length) {
-    tb.innerHTML=`<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:24px">No model data yet.</td></tr>`;
+    tb.innerHTML = emptyRow(10,'cpu','No model data','Make API calls to see model stats.');
+    lucide.createIcons({nodes:[tb]});
     return;
   }
   tb.innerHTML = data.map(m => {
-    const costPerK = m.input_tokens ? (m.cost_usd/m.input_tokens*1000).toFixed(4) : '0';
-    const cacheCls = m.cache_hit_pct>50?'badge-green':m.cache_hit_pct>20?'badge-warn':'badge-red';
-    const wasteCls = m.waste_pct>30?'badge-red':m.waste_pct>10?'badge-warn':'badge-green';
+    const cpk  = m.input_tokens ? (m.cost_usd/m.input_tokens*1000).toFixed(4) : '0';
+    const cc   = m.cache_hit_pct>50?'badge-green':m.cache_hit_pct>20?'badge-warn':'badge-red';
+    const wc   = m.waste_pct>30?'badge-red':m.waste_pct>10?'badge-warn':'badge-green';
     return `<tr>
       <td><strong>${m.model}</strong></td>
       <td style="color:var(--muted)">${m.provider||'—'}</td>
       <td>${m.calls}</td>
-      <td>${fmtN(m.input_tokens)}</td>
-      <td>${fmtN(m.output_tokens)}</td>
+      <td>${fmtN(m.input_tokens)}</td><td>${fmtN(m.output_tokens)}</td>
       <td>${fmtCost(m.cost_usd)}</td>
-      <td style="color:var(--muted)">$${costPerK}/k</td>
-      <td><span class="badge ${cacheCls}">${m.cache_hit_pct}%</span></td>
-      <td><span class="badge ${wasteCls}">${m.waste_pct}%</span></td>
+      <td style="color:var(--muted)">$${cpk}</td>
+      <td><span class="badge ${cc}">${m.cache_hit_pct}%</span></td>
+      <td><span class="badge ${wc}">${m.waste_pct}%</span></td>
       <td style="color:var(--muted)">${m.avg_latency_ms?m.avg_latency_ms+'ms':'—'}</td>
     </tr>`;
   }).join('');
 }
 
-// ── Savings ────────────────────────────────────────────────────────────────
+// ── Savings ───────────────────────────────────────────────────────────────────
 async function loadSavings() {
   const [sum, daily, models] = await Promise.all([
     api(`/skim/data/summary?days=${_days}`),
@@ -690,75 +953,55 @@ async function loadSavings() {
     api(`/skim/data/models?days=${_days}`),
   ]);
   if (sum) {
-    document.getElementById('sv-tokens').textContent  = fmtN(sum.total_saved);
-    // Estimate $ saved: saved_tokens × claude-sonnet rate $3/1M
+    animNum(document.getElementById('sv-tokens'),   sum.total_saved  || 0);
+    animNum(document.getElementById('sv-cache-tok'),sum.total_cached || 0);
     const savedUsd = (sum.total_saved||0) * 3 / 1_000_000;
-    document.getElementById('sv-usd').textContent     = fmtCost(savedUsd);
-    const cacheUsd = (sum.total_cached||0) * 3 / 1_000_000;
-    document.getElementById('sv-cache-usd').textContent = fmtCost(cacheUsd);
+    document.getElementById('sv-usd').textContent = fmtCost(savedUsd);
   }
-  if (daily) {
-    // Cumulative savings
+  if (daily && daily.length) {
     let cum = 0;
     const cumData = daily.map(r => { cum += (r.saved_tokens||0); return cum; });
     mkChart('ch-cumulative','line',{
       labels: daily.map(r=>r.day.slice(5)),
-      datasets:[{
-        label:'Cumulative tokens saved',data:cumData,
-        borderColor:C.green,backgroundColor:'rgba(0,212,170,.08)',
-        fill:true,tension:.4,pointRadius:3,
-      }],
+      datasets:[{label:'Cumulative saved',data:cumData,
+        borderColor:P.green,backgroundColor:ctx=>chartGradient(ctx,'#00d4aa',.25),
+        fill:true,tension:.4,pointRadius:3,borderWidth:2}],
     });
-    // Save rate
     mkChart('ch-save-rate','bar',{
       labels: daily.map(r=>r.day.slice(5)),
-      datasets:[{
-        label:'Save rate (%)',
+      datasets:[{label:'Save %',borderRadius:3,
         data:daily.map(r=>r.input_tokens?((r.saved_tokens||0)/r.input_tokens*100).toFixed(1):0),
-        backgroundColor:C.green+'88',
-      }],
+        backgroundColor:P.green+'88'}],
     },{scales:{
-      x:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10}}},
-      y:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10},callback:v=>v+'%'}},
+      x:{grid:{color:GRID},ticks:{color:LABELS,font:{size:10}}},
+      y:{grid:{color:GRID},ticks:{color:LABELS,font:{size:10},callback:v=>v+'%'}},
     }});
-    // Breakdown
     mkChart('ch-breakdown','bar',{
       labels: daily.map(r=>r.day.slice(5)),
       datasets:[
-        {label:'Sent',   data:daily.map(r=>r.input_tokens||0), backgroundColor:C.accent+'66'},
-        {label:'Saved',  data:daily.map(r=>r.saved_tokens||0), backgroundColor:C.green+'88'},
-        {label:'Cached', data:daily.map(r=>r.cached_tokens||0), backgroundColor:C.blue+'88'},
+        {label:'Sent',  data:daily.map(r=>r.input_tokens||0),  backgroundColor:P.accent+'66',borderRadius:3},
+        {label:'Saved', data:daily.map(r=>r.saved_tokens||0),  backgroundColor:P.green+'88',borderRadius:3},
+        {label:'Cached',data:daily.map(r=>r.cached_tokens||0), backgroundColor:P.blue+'88',borderRadius:3},
       ],
     });
   }
-  if (models) {
+  if (models && models.length) {
     mkChart('ch-model-save','bar',{
       labels: models.map(m=>m.model),
       datasets:[
-        {label:'Saved',  data:models.map(m=>m.saved_tokens||0),  backgroundColor:C.green+'88'},
-        {label:'Cached', data:models.map(m=>m.cached_tokens||0), backgroundColor:C.blue+'88'},
+        {label:'Saved',  data:models.map(m=>m.saved_tokens||0),  backgroundColor:P.green+'88',borderRadius:3},
+        {label:'Cached', data:models.map(m=>m.cached_tokens||0), backgroundColor:P.blue+'88',borderRadius:3},
       ],
     },{indexAxis:'y'});
   }
 }
 
-// ── Top-level ──────────────────────────────────────────────────────────────
-function reload() {
-  _days = parseInt(document.getElementById('period').value);
-  const active = document.querySelector('.content.active');
-  if (!active) return;
-  const name = active.id.replace('page-','');
-  if (name==='overview') loadOverview();
-  if (name==='sessions') loadSessions();
-  if (name==='usage')    loadUsage();
-  if (name==='models')   loadModels();
-  if (name==='savings')  loadSavings();
-}
-
-// ── Init ───────────────────────────────────────────────────────────────────
-document.getElementById('proxy-url').textContent = window.location.host;
+// ── Boot ──────────────────────────────────────────────────────────────────────
 connectSSE();
 loadOverview();
+setInterval(() => {
+  if (document.visibilityState === 'visible') reload();
+}, 30000);
 </script>
 </body>
 </html>
