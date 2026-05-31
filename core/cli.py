@@ -298,6 +298,8 @@ def cmd_admin(argv):
 
   skim admin audit --days 30
 
+  skim admin purge --older-than 90
+
 {DIM}Reads SKIM_SERVER_URL + SKIM_SERVER_TOKEN from env{NC}
 """)
         return 0
@@ -471,6 +473,23 @@ def cmd_admin(argv):
             ts = e.get("ts","")[:19].replace("T"," ")
             print(f"  {ts:<22} {e.get('email',''):<28} {e.get('action',''):<22} {e.get('detail') or ''}")
         print(f"\n  {len(entries)} entries\n")
+        return 0
+
+    # ── purge ─────────────────────────────────────────────────────────────────
+    elif sub == "purge":
+        p = argparse.ArgumentParser(prog="skim admin purge")
+        p.add_argument("--older-than", type=int, default=90,
+                       help="Delete events older than N days (default 90)")
+        p.add_argument("--yes", action="store_true", help="Skip confirmation")
+        args = p.parse_args(argv[1:])
+        if not args.yes:
+            resp = input(f"Delete all events older than {args.older_than} days? [y/N] ")
+            if resp.strip().lower() not in ("y", "yes"):
+                print("Cancelled.")
+                return 0
+        code, data = req("POST", "/api/v1/admin/purge", {"older_than_days": args.older_than})
+        print(ok(f"Purged {data.get('removed', 0)} events older than {args.older_than} days")
+              if code == 200 else err(data))
         return 0
 
     print(f"Unknown admin command: {sub}\nRun 'skim admin' for help.", file=sys.stderr)

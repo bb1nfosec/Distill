@@ -27,10 +27,18 @@ To disable browser auto-open: `skim proxy --no-browser`
 
 **Claude Code:**
 ```bash
+export ANTHROPIC_API_KEY=sk-ant-...        # required — see note below
 export ANTHROPIC_BASE_URL=http://localhost:7474
 ```
 
 Add this to your `.zshrc` or `.bashrc` to make it permanent.
+
+> ⚠️ **Claude Code on a Pro/Max subscription cannot use the proxy.** Subscription
+> (OAuth `/login`) traffic ignores `ANTHROPIC_BASE_URL` and routes straight to
+> Anthropic — the proxy stays on "waiting for calls". To intercept Claude Code
+> you must use **API-key auth**: set `ANTHROPIC_API_KEY` in the same shell,
+> before launching `claude`. This bills against API credits, not the
+> subscription. Cursor, the SDK, and OpenAI-compatible tools are unaffected.
 
 **Cursor / Windsurf / any OpenAI-compatible tool:**
 ```bash

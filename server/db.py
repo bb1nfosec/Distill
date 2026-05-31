@@ -140,6 +140,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     bg = _cols("budgets")
     if "updated_at" not in bg:
         conn.execute("ALTER TABLE budgets ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+    us = _cols("users")
+    if "last_login" not in us:
+        conn.execute("ALTER TABLE users ADD COLUMN last_login TEXT")
     conn.commit()
 
 
@@ -176,6 +179,22 @@ def list_users(conn) -> list[dict]:
 def delete_user(conn, user_id: str) -> None:
     conn.execute("DELETE FROM users WHERE id=?", (user_id,))
     conn.commit()
+
+
+def touch_last_login(conn, user_id: str) -> None:
+    conn.execute("UPDATE users SET last_login=? WHERE id=?", (_ts(), user_id))
+    conn.commit()
+
+
+def purge_events(conn, older_than_days: int) -> int:
+    """Delete events older than N days. Returns rows removed.
+    Enterprise data-retention / compliance control."""
+    cur = conn.execute(
+        "DELETE FROM events WHERE datetime(ts) < datetime('now', ?, 'utc')",
+        (f"-{older_than_days} days",),
+    )
+    conn.commit()
+    return cur.rowcount
 
 
 # ── API keys ─────────────────────────────────────────────────────────────────

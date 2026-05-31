@@ -5,6 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.1] — 2026-06-01
+
+### Added — Enterprise hardening
+
+- **Login rate limiting** — sliding-window brute-force protection on
+  `POST /api/v1/auth/login`, keyed by client IP (honours `X-Forwarded-For`).
+  Tunable via `SKIM_LOGIN_MAX_ATTEMPTS` (default 10) and `SKIM_LOGIN_WINDOW_SEC`
+  (default 300). Returns `429` when exceeded.
+- **Last-login tracking** — `users.last_login` column, updated on every successful
+  login; login audit entries now record the originating IP.
+- **Data retention / purge** — `POST /api/v1/admin/purge` (admin only) and
+  `skim admin purge --older-than N` delete events older than N days for
+  compliance. Confirmation prompt unless `--yes`; the action is audited.
+- New DB functions: `touch_last_login`, `purge_events`.
+
+### Changed
+
+- **Honest Claude Code messaging.** Confirmed via Claude Code docs: a Pro/Max
+  subscription (OAuth login) ignores `ANTHROPIC_BASE_URL` and routes straight to
+  Anthropic — the proxy cannot intercept subscription traffic. README, quickstart,
+  proxy docs, the proxy startup banner, and the demo now state plainly that
+  Claude Code requires **API-key auth** to use the proxy (Cursor / SDK /
+  OpenAI-compatible tools are unaffected). Quickstart snippets now set
+  `ANTHROPIC_API_KEY` alongside `ANTHROPIC_BASE_URL`.
+- Demo page rewritten as a full product landing page (hero, live terminal,
+  impact stats, individual/enterprise toggle with mock dashboards, install CTA)
+  with the Claude Code subscription caveat surfaced inline. No fake SaaS
+  trial / "book a demo" / SCIM claims.
+
+---
+
 ## [0.5.0] — 2026-05-31
 
 ### Added — Enterprise control plane

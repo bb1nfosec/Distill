@@ -126,6 +126,14 @@ def _auth_type():
 
 **Extending:** Adding a new plan type is one `elif` in `_auth_type()`. The rest of the codebase branches on `plan`.
 
+> ⚠️ **Claude Code subscription caveat.** The `oauth` branch only applies to clients
+> that actually send `Authorization: Bearer` to the proxy's base URL. **Claude Code on
+> a Pro/Max subscription does NOT** — it ignores `ANTHROPIC_BASE_URL` entirely and
+> routes subscription traffic straight to `api.anthropic.com`. To put Claude Code
+> behind the proxy you must use API-key auth (`ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`,
+> same shell, before launching `claude`). Cursor, the SDK, and OpenAI-compatible tools
+> route through the proxy normally.
+
 ## Budget enforcement
 
 When `SKIM_SERVER_URL` + `SKIM_SERVER_TOKEN` are set, the proxy calls `/api/v1/budget/check` before forwarding each request.

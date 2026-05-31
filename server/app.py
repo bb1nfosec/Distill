@@ -37,6 +37,7 @@ except ImportError:
 from server.db import (
     connect, init_schema,
     create_user, get_user_by_email, get_user_by_id, list_users, delete_user,
+    touch_last_login, purge_events,
     create_api_key, get_user_for_key, revoke_api_key,
     insert_event, stats_summary, stats_by_day, stats_by_user,
     stats_by_model, stats_by_hour, query_events, get_insights,
@@ -71,6 +72,30 @@ def _srv_sse_broadcast(event: dict) -> None:
                 _srv_sse_clients.remove(q)
             except ValueError:
                 pass
+
+# ── Login rate limiting (brute-force protection) ─────────────────────────────
+# In-memory sliding window keyed by client IP. Each gunicorn worker keeps its
+# own window; for strict org-wide limits, front with a shared store.
+_login_hits: dict = {}
+_login_lock = threading.Lock()
+_LOGIN_MAX = int(os.environ.get("SKIM_LOGIN_MAX_ATTEMPTS", "10"))
+_LOGIN_WINDOW = int(os.environ.get("SKIM_LOGIN_WINDOW_SEC", "300"))
+
+
+def _rate_limited(ip: str) -> bool:
+    import time as _t
+    now = _t.time()
+    with _login_lock:
+        hits = [t for t in _login_hits.get(ip, []) if now - t < _LOGIN_WINDOW]
+        hits.append(now)
+        _login_hits[ip] = hits
+        return len(hits) > _LOGIN_MAX
+
+
+def _client_ip() -> str:
+    fwd = request.headers.get("X-Forwarded-For", "")
+    return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
+
 
 _PRICING = {
     "claude": 3.00, "claude-sonnet": 3.00, "claude-haiku": 0.80, "claude-opus": 15.00,
@@ -184,6 +209,10 @@ def create_app(db_path: Path = None) -> "Flask":
 
     @app.route("/api/v1/auth/login", methods=["POST"])
     def login():
+        ip = _client_ip()
+        if _rate_limited(ip):
+            return jsonify({"error": "Too many login attempts. Try again later."}), 429
+
         data  = request.get_json(silent=True) or {}
         email = data.get("email", "").strip()
         pw    = data.get("password", "")
@@ -203,7 +232,9 @@ def create_app(db_path: Path = None) -> "Flask":
             return jsonify({"error": "Invalid credentials"}), 401
 
         token = issue_jwt({"sub": user["id"], "email": user["email"], "role": user["role"]})
-        log_audit(get_db(), user["id"], user["email"], "auth.login")
+        db = get_db()
+        touch_last_login(db, user["id"])
+        log_audit(db, user["id"], user["email"], "auth.login", detail=f"ip={ip}")
         return jsonify({"token": token, "user": _safe_user(user)})
 
     @app.route("/api/v1/auth/me")
@@ -551,6 +582,19 @@ def create_app(db_path: Path = None) -> "Flask":
         action = request.args.get("action")
         limit  = min(int(request.args.get("limit", 200)), 1000)
         return jsonify({"log": get_audit_log(get_db(), days, action, limit)})
+
+    @app.route("/api/v1/admin/purge", methods=["POST"])
+    @require_admin
+    def admin_purge():
+        data       = request.get_json(silent=True) or {}
+        older_than = int(data.get("older_than_days", 90))
+        if older_than < 1:
+            return jsonify({"error": "older_than_days must be >= 1"}), 400
+        db      = get_db()
+        removed = purge_events(db, older_than)
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "data.purged", "events", None, f"removed={removed} older_than={older_than}d")
+        return jsonify({"removed": removed, "older_than_days": older_than})
 
     # ── Admin API ─────────────────────────────────────────────────────────────
 

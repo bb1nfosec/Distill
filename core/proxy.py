@@ -959,6 +959,8 @@ def serve(
     print(f"  {BOLD}├{'─'*W}┤{NC}")
     print(f"  {BOLD}│{NC}  {YELLOW}Claude Code / Cursor:{NC}{' '*(W-21)}{BOLD}│{NC}")
     cmd_line(f"export ANTHROPIC_BASE_URL={hp}", f"{CYAN}export ANTHROPIC_BASE_URL={hp}{NC}")
+    _note = "Pro/Max sub bypasses proxy; also set ANTHROPIC_API_KEY"
+    cmd_line(_note, f"{DIM}{_note}{NC}")
     print(f"  {BOLD}│{NC}{' '*(W+2)}{BOLD}│{NC}")
     print(f"  {BOLD}│{NC}  {YELLOW}OpenAI-compatible tools:{NC}{' '*(W-25)}{BOLD}│{NC}")
     cmd_line(f"export OPENAI_BASE_URL={hp}", f"{CYAN}export OPENAI_BASE_URL={hp}{NC}")

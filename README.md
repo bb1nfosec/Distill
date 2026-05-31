@@ -92,6 +92,7 @@ Browser opens automatically to your live dashboard.
 **3. Point your tool at it**
 
 ```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # required for Claude Code
 export ANTHROPIC_BASE_URL=http://localhost:7474
 ```
 
@@ -118,7 +119,10 @@ export ANTHROPIC_BASE_URL=http://localhost:7474
 </table>
 
 > [!TIP]
-> **No API key? No problem.** skim auto-detects your plan — `x-api-key` for API users, `Authorization: Bearer` for **Claude Pro / Max** users — and routes each accordingly. Pro users get full waste filtering and tracking out of the box.
+> **skim auto-detects your plan** — `x-api-key` for API users, `Authorization: Bearer` for OAuth clients — and routes each accordingly, with full waste filtering and tracking either way.
+
+> [!WARNING]
+> **Claude Code on a Pro/Max subscription cannot use a local proxy.** Subscription traffic ignores `ANTHROPIC_BASE_URL` and routes straight to Anthropic — the proxy will sit on "waiting for calls". To intercept Claude Code, use **API-key auth** (`export ANTHROPIC_API_KEY=sk-ant-…` alongside `ANTHROPIC_BASE_URL`, in the same shell before launching `claude`). skim also works as-is with **Cursor, the SDK, and any OpenAI-compatible tool**.
 
 <br/>
 
