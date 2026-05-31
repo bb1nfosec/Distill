@@ -234,6 +234,249 @@ def cmd_version(_argv):
     return 0
 
 
+def cmd_admin(argv):
+    """skim admin — manage users, budgets, keys, and webhooks via the skim server API."""
+    import json
+    import os
+    import urllib.request
+    import urllib.error
+
+    server = os.environ.get("SKIM_SERVER_URL", "").rstrip("/")
+    token  = os.environ.get("SKIM_SERVER_TOKEN", "")
+
+    if not server or not token:
+        print("Error: set SKIM_SERVER_URL and SKIM_SERVER_TOKEN first.", file=sys.stderr)
+        print("  export SKIM_SERVER_URL=http://localhost:7475", file=sys.stderr)
+        print("  export SKIM_SERVER_TOKEN=sk-skim-...", file=sys.stderr)
+        return 1
+
+    BOLD = "\033[1m"; CYAN = "\033[96m"; GREEN = "\033[92m"
+    RED = "\033[91m"; NC = "\033[0m"; DIM = "\033[2m"
+
+    def req(method, path, body=None):
+        url  = f"{server}{path}"
+        data = json.dumps(body).encode() if body else None
+        r    = urllib.request.Request(url, data=data, method=method)
+        r.add_header("Authorization", f"Bearer {token}")
+        r.add_header("Content-Type",  "application/json")
+        try:
+            with urllib.request.urlopen(r, timeout=10) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": str(e)}
+        except Exception as e:
+            return 0, {"error": str(e)}
+
+    def ok(d): return f"{GREEN}✓{NC} {d}"
+    def err(d): return f"{RED}✗{NC} {d}"
+
+    if not argv:
+        print(f"""
+{BOLD}skim admin{NC} — manage the skim server
+
+{BOLD}Usage:{NC}
+  skim admin users list
+  skim admin users invite --email X --role user --team engineering
+  skim admin users delete <email>
+
+  skim admin budget set --owner-type user --owner-id <user_id> --tokens 1000000 --period monthly
+  skim admin budget set --owner-type team --owner-id engineering --usd 500
+  skim admin budget list
+  skim admin budget delete <id>
+
+  skim admin keys list
+  skim admin keys revoke <key-prefix>
+
+  skim admin webhooks list
+  skim admin webhooks add --url https://hooks.slack.com/... --channel slack
+  skim admin webhooks delete <id>
+
+  skim admin export --days 30 --out events.csv
+
+  skim admin audit --days 30
+
+{DIM}Reads SKIM_SERVER_URL + SKIM_SERVER_TOKEN from env{NC}
+""")
+        return 0
+
+    sub = argv[0]
+
+    # ── users ────────────────────────────────────────────────────────────────
+    if sub == "users":
+        action = argv[1] if len(argv) > 1 else "list"
+        if action == "list":
+            code, data = req("GET", "/api/v1/admin/users")
+            if code != 200:
+                print(err(data)); return 1
+            users = data.get("users", [])
+            print(f"\n{BOLD}  {'Email':<30} {'Name':<18} {'Team':<15} {'Role'}{NC}")
+            print(f"  {'─'*30} {'─'*18} {'─'*15} {'─'*10}")
+            for u in users:
+                print(f"  {u.get('email',''):<30} {u.get('name',''):<18} {u.get('team',''):<15} {u.get('role','')}")
+            print(f"\n  {len(users)} user(s)\n")
+
+        elif action == "invite":
+            p = argparse.ArgumentParser(prog="skim admin users invite")
+            p.add_argument("--email",  required=True)
+            p.add_argument("--role",   default="user", choices=["user","team_admin","admin"])
+            p.add_argument("--team",   default="")
+            args = p.parse_args(argv[2:])
+            code, data = req("POST", "/api/v1/admin/invites",
+                             {"email": args.email, "role": args.role, "team": args.team})
+            if code not in (200, 201):
+                print(err(data)); return 1
+            print(ok(f"Invite created for {args.email}"))
+            print(f"  {CYAN}{data.get('invite_url','')}{NC}\n")
+
+        elif action == "delete":
+            email = argv[2] if len(argv) > 2 else ""
+            code, data = req("GET", "/api/v1/admin/users")
+            user = next((u for u in data.get("users",[]) if u["email"] == email), None)
+            if not user:
+                print(err(f"User not found: {email}")); return 1
+            code, data = req("DELETE", f"/api/v1/admin/users/{user['id']}")
+            print(ok(f"Deleted {email}") if code == 200 else err(data))
+        return 0
+
+    # ── budget ────────────────────────────────────────────────────────────────
+    elif sub == "budget":
+        action = argv[1] if len(argv) > 1 else "list"
+        if action == "list":
+            code, data = req("GET", "/api/v1/admin/budgets")
+            if code != 200:
+                print(err(data)); return 1
+            budgets = data.get("budgets", [])
+            print(f"\n{BOLD}  {'ID':<5} {'Type':<8} {'Owner':<24} {'Tokens':>12} {'USD':>10} {'Period':<10} {'Alert%'}{NC}")
+            print(f"  {'─'*5} {'─'*8} {'─'*24} {'─'*12} {'─'*10} {'─'*10} {'─'*6}")
+            for b in budgets:
+                print(f"  {b['id']:<5} {b['owner_type']:<8} {str(b.get('owner_id','global')):<24} "
+                      f"{str(b.get('limit_tokens') or '—'):>12} {str(b.get('limit_usd') or '—'):>10} "
+                      f"{b['period']:<10} {b['alert_pct']}%")
+            print(f"\n  {len(budgets)} budget(s)\n")
+
+        elif action == "set":
+            p = argparse.ArgumentParser(prog="skim admin budget set")
+            p.add_argument("--owner-type", default="user", choices=["user","team","global"])
+            p.add_argument("--owner-id",   default=None)
+            p.add_argument("--tokens",     type=int, default=None)
+            p.add_argument("--usd",        type=float, default=None)
+            p.add_argument("--period",     default="monthly", choices=["daily","weekly","monthly"])
+            p.add_argument("--alert-pct",  type=float, default=80.0)
+            args = p.parse_args(argv[2:])
+            payload = {
+                "owner_type": args.owner_type, "owner_id": args.owner_id,
+                "limit_tokens": args.tokens, "limit_usd": args.usd,
+                "period": args.period, "alert_pct": args.alert_pct,
+            }
+            code, data = req("POST", "/api/v1/admin/budgets", payload)
+            print(ok(f"Budget set (id={data.get('budget',{}).get('id')})") if code in (200,201) else err(data))
+
+        elif action == "delete":
+            bid = argv[2] if len(argv) > 2 else ""
+            code, data = req("DELETE", f"/api/v1/admin/budgets/{bid}")
+            print(ok("Budget deleted") if code == 200 else err(data))
+        return 0
+
+    # ── keys ─────────────────────────────────────────────────────────────────
+    elif sub == "keys":
+        action = argv[1] if len(argv) > 1 else "list"
+        if action == "list":
+            code, data = req("GET", "/api/v1/auth/keys")
+            if code != 200:
+                print(err(data)); return 1
+            keys = data.get("keys", [])
+            print(f"\n{BOLD}  {'Key (prefix)':<20} {'Label':<18} {'Scope':<10} {'Expires':<24} {'Last used'}{NC}")
+            print(f"  {'─'*20} {'─'*18} {'─'*10} {'─'*24} {'─'*20}")
+            for k in keys:
+                print(f"  {k['key'][:18]+'…':<20} {k.get('label',''):<18} "
+                      f"{k.get('scope',''):<10} {k.get('expires_at','never'):<24} "
+                      f"{k.get('last_used','never')}")
+            print()
+
+        elif action == "revoke":
+            prefix = argv[2] if len(argv) > 2 else ""
+            code, data = req("DELETE", f"/api/v1/auth/keys/{prefix}")
+            print(ok("Key revoked") if code == 200 else err(data))
+        return 0
+
+    # ── webhooks ──────────────────────────────────────────────────────────────
+    elif sub == "webhooks":
+        action = argv[1] if len(argv) > 1 else "list"
+        if action == "list":
+            code, data = req("GET", "/api/v1/admin/webhooks")
+            if code != 200:
+                print(err(data)); return 1
+            hooks = data.get("webhooks", [])
+            print(f"\n{BOLD}  {'ID':<5} {'Channel':<8} {'Events':<36} {'URL'}{NC}")
+            print(f"  {'─'*5} {'─'*8} {'─'*36} {'─'*40}")
+            for h in hooks:
+                print(f"  {h['id']:<5} {h['channel']:<8} {h['events']:<36} {h['url']}")
+            print()
+
+        elif action == "add":
+            p = argparse.ArgumentParser(prog="skim admin webhooks add")
+            p.add_argument("--url",     required=True)
+            p.add_argument("--channel", default="http", choices=["http","slack"])
+            p.add_argument("--events",  default="budget.warning,budget.exceeded")
+            p.add_argument("--secret",  default="")
+            args = p.parse_args(argv[2:])
+            code, data = req("POST", "/api/v1/admin/webhooks",
+                             {"url": args.url, "channel": args.channel,
+                              "events": args.events, "secret": args.secret})
+            print(ok(f"Webhook added (id={data.get('webhook',{}).get('id')})") if code in (200,201) else err(data))
+
+        elif action == "delete":
+            wid = argv[2] if len(argv) > 2 else ""
+            code, data = req("DELETE", f"/api/v1/admin/webhooks/{wid}")
+            print(ok("Webhook deleted") if code == 200 else err(data))
+        return 0
+
+    # ── export ────────────────────────────────────────────────────────────────
+    elif sub == "export":
+        p = argparse.ArgumentParser(prog="skim admin export")
+        p.add_argument("--days", type=int, default=30)
+        p.add_argument("--out",  default="skim-events.csv")
+        args = p.parse_args(argv[1:])
+        url  = f"{server}/api/v1/export/events.csv?days={args.days}"
+        r    = urllib.request.Request(url)
+        r.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(r, timeout=30) as resp:
+                with open(args.out, "wb") as f:
+                    f.write(resp.read())
+            print(ok(f"Exported to {args.out}"))
+        except Exception as e:
+            print(err(str(e))); return 1
+        return 0
+
+    # ── audit ─────────────────────────────────────────────────────────────────
+    elif sub == "audit":
+        p = argparse.ArgumentParser(prog="skim admin audit")
+        p.add_argument("--days",   type=int, default=30)
+        p.add_argument("--action", default=None)
+        args   = p.parse_args(argv[1:])
+        path   = f"/api/v1/admin/audit?days={args.days}"
+        if args.action:
+            path += f"&action={args.action}"
+        code, data = req("GET", path)
+        if code != 200:
+            print(err(data)); return 1
+        entries = data.get("log", [])
+        print(f"\n{BOLD}  {'Timestamp':<22} {'User':<28} {'Action':<22} {'Detail'}{NC}")
+        print(f"  {'─'*22} {'─'*28} {'─'*22} {'─'*30}")
+        for e in entries:
+            ts = e.get("ts","")[:19].replace("T"," ")
+            print(f"  {ts:<22} {e.get('email',''):<28} {e.get('action',''):<22} {e.get('detail') or ''}")
+        print(f"\n  {len(entries)} entries\n")
+        return 0
+
+    print(f"Unknown admin command: {sub}\nRun 'skim admin' for help.", file=sys.stderr)
+    return 1
+
+
 COMMANDS = {
     "scan":     cmd_scan,
     "analyze":  cmd_analyze,
@@ -247,6 +490,7 @@ COMMANDS = {
     "config":   cmd_config,
     "hooks":    cmd_hooks,
     "baseline": cmd_baseline,
+    "admin":    cmd_admin,
     "version":  cmd_version,
 }
 

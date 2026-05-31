@@ -35,11 +35,17 @@ except ImportError:
     _FLASK_OK = False
 
 from server.db import (
-    connect, init_schema, create_user, get_user_by_email, get_user_by_id,
-    create_api_key, get_user_for_key, insert_event,
-    stats_summary, stats_by_day, stats_by_user, stats_by_model, stats_by_hour,
-    query_events, get_insights,
+    connect, init_schema,
+    create_user, get_user_by_email, get_user_by_id, list_users, delete_user,
+    create_api_key, get_user_for_key, revoke_api_key,
+    insert_event, stats_summary, stats_by_day, stats_by_user,
+    stats_by_model, stats_by_hour, query_events, get_insights,
+    set_budget, get_budget, list_budgets, delete_budget, check_budget,
+    create_webhook, list_webhooks, delete_webhook,
+    create_invite, get_invite, use_invite, list_invites,
+    log_audit, get_audit_log,
 )
+from server.webhooks import fire as fire_webhooks
 from server.auth import (
     issue_jwt, verify_jwt, hash_password, verify_password,
     ldap_authenticate, get_oidc_providers,
@@ -146,6 +152,19 @@ def create_app(db_path: Path = None) -> "Flask":
             return f(*a, **kw)
         return wrapper
 
+    def require_team_admin(f):
+        """Allows admin and team_admin roles."""
+        @wraps(f)
+        def wrapper(*a, **kw):
+            user = _current_user()
+            if not user:
+                return jsonify({"error": "Unauthorized"}), 401
+            if user.get("role") not in ("admin", "team_admin"):
+                return jsonify({"error": "Forbidden — team admin required"}), 403
+            request.user = user
+            return f(*a, **kw)
+        return wrapper
+
     # ── Dashboard ─────────────────────────────────────────────────────────
 
     @app.route("/")
@@ -184,6 +203,7 @@ def create_app(db_path: Path = None) -> "Flask":
             return jsonify({"error": "Invalid credentials"}), 401
 
         token = issue_jwt({"sub": user["id"], "email": user["email"], "role": user["role"]})
+        log_audit(get_db(), user["id"], user["email"], "auth.login")
         return jsonify({"token": token, "user": _safe_user(user)})
 
     @app.route("/api/v1/auth/me")
@@ -194,17 +214,43 @@ def create_app(db_path: Path = None) -> "Flask":
     @app.route("/api/v1/auth/keys", methods=["GET", "POST"])
     @require_auth
     def api_keys():
+        db = get_db()
         if request.method == "POST":
-            data  = request.get_json(silent=True) or {}
-            label = data.get("label", "")
-            key   = create_api_key(get_db(), request.user["id"], label)
-            return jsonify({"key": key, "label": label}), 201
-        # GET — list keys (masked)
-        rows = get_db().execute(
-            "SELECT key, label, created_at, last_used FROM api_keys WHERE user_id=?",
+            data        = request.get_json(silent=True) or {}
+            label       = data.get("label", "")
+            scope       = data.get("scope", "ingest")
+            expires_days = data.get("expires_days")
+            if scope == "admin" and request.user["role"] != "admin":
+                return jsonify({"error": "Only org admins can create admin-scoped keys"}), 403
+            key = create_api_key(db, request.user["id"], label, scope, expires_days)
+            log_audit(db, request.user["id"], request.user.get("email"),
+                      "auth.key_created", "api_key", key[:12], f"scope={scope}")
+            return jsonify({"key": key, "label": label, "scope": scope}), 201
+        rows = db.execute(
+            "SELECT key, label, scope, created_at, expires_at, last_used "
+            "FROM api_keys WHERE user_id=?",
             (request.user["id"],)
         ).fetchall()
         return jsonify({"keys": [dict(r) for r in rows]})
+
+    @app.route("/api/v1/auth/keys/<key_prefix>", methods=["DELETE"])
+    @require_auth
+    def revoke_key(key_prefix):
+        db  = get_db()
+        row = db.execute(
+            "SELECT * FROM api_keys WHERE key LIKE ? AND user_id=?",
+            (key_prefix + "%", request.user["id"])
+        ).fetchone()
+        if not row:
+            if request.user["role"] == "admin":
+                row = db.execute("SELECT * FROM api_keys WHERE key LIKE ?",
+                                 (key_prefix + "%",)).fetchone()
+        if not row:
+            return jsonify({"error": "Key not found"}), 404
+        revoke_api_key(db, row["key"])
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "auth.key_revoked", "api_key", row["key"][:12])
+        return jsonify({"revoked": True})
 
     @app.route("/api/v1/auth/oidc/providers")
     def oidc_providers():
@@ -227,12 +273,14 @@ def create_app(db_path: Path = None) -> "Flask":
         return jsonify({"data": stats_by_day(get_db(), days)})
 
     @app.route("/api/v1/stats/by-user")
-    @require_auth
+    @require_team_admin
     def stats_by_user_route():
-        if request.user["role"] != "admin":
-            return jsonify({"error": "Admin only"}), 403
         days = int(request.args.get("days", 30))
-        return jsonify({"data": stats_by_user(get_db(), days)})
+        data = stats_by_user(get_db(), days)
+        # team_admin sees only their own team
+        if request.user["role"] == "team_admin" and request.user.get("team"):
+            data = [r for r in data if r.get("team") == request.user["team"]]
+        return jsonify({"data": data})
 
     @app.route("/api/v1/stats/by-model")
     @require_auth
@@ -261,12 +309,31 @@ def create_app(db_path: Path = None) -> "Flask":
     def ingest_event():
         data = request.get_json(silent=True) or {}
         data.setdefault("user_id", request.user["id"])
-        model    = data.get("model", "claude")
-        inp_tok  = data.get("input_tokens", 0)
-        rate     = _PRICING.get(model, 2.50)
+        model   = data.get("model", "claude")
+        inp_tok = data.get("input_tokens", 0)
+        rate    = _PRICING.get(model, 2.50)
         data.setdefault("cost_usd", inp_tok / 1_000_000 * rate)
-        eid = insert_event(get_db(), data)
+        db  = get_db()
+        eid = insert_event(db, data)
         _srv_sse_broadcast({**data, "id": eid})
+        # Check budget thresholds and fire webhooks
+        try:
+            uid    = request.user["id"]
+            team   = request.user.get("team")
+            result = check_budget(db, uid, team)
+            if result.get("at_warning") and not result.get("allowed") is False:
+                fire_webhooks(db, "budget.warning", {
+                    "user": request.user.get("email", uid),
+                    "team": team, "pct_used": result["pct_used"],
+                    "budget_type": result.get("budget_type"),
+                })
+            elif not result.get("allowed", True):
+                fire_webhooks(db, "budget.exceeded", {
+                    "user": request.user.get("email", uid),
+                    "team": team, "reason": result.get("reason"),
+                })
+        except Exception:
+            pass
         return jsonify({"id": eid}), 201
 
     @app.route("/skim/stream")
@@ -311,31 +378,219 @@ def create_app(db_path: Path = None) -> "Flask":
         events = query_events(get_db(), days=days, user_id=uid, limit=limit, offset=offset)
         return jsonify({"events": events, "count": len(events)})
 
-    # ── Admin API ─────────────────────────────────────────────────────────
+    # ── Registration via invite ───────────────────────────────────────────────
+
+    @app.route("/invite/<token>")
+    def invite_page(token):
+        return send_from_directory(_STATIC, "invite.html")
+
+    @app.route("/api/v1/auth/register", methods=["POST"])
+    def register():
+        data  = request.get_json(silent=True) or {}
+        token = data.get("token", "").strip()
+        name  = data.get("name",  "").strip()
+        pw    = data.get("password", "")
+        db    = get_db()
+        inv   = get_invite(db, token)
+        if not inv:
+            return jsonify({"error": "Invalid or expired invite"}), 400
+        if get_user_by_email(db, inv["email"]):
+            return jsonify({"error": "Email already registered"}), 409
+        if not pw or len(pw) < 8:
+            return jsonify({"error": "Password must be at least 8 characters"}), 400
+        user = create_user(db, inv["email"], name=name, team=inv["team"],
+                           role=inv["role"], password_hash=hash_password(pw))
+        use_invite(db, token)
+        log_audit(db, user["id"], user["email"], "user.created",
+                  "invite", token, f"role={inv['role']}")
+        jwt = issue_jwt({"sub": user["id"], "email": user["email"], "role": user["role"]})
+        return jsonify({"token": jwt, "user": _safe_user(user)}), 201
+
+    @app.route("/api/v1/admin/invites", methods=["GET", "POST"])
+    @require_admin
+    def admin_invites():
+        db = get_db()
+        if request.method == "POST":
+            data  = request.get_json(silent=True) or {}
+            email = data.get("email", "").strip()
+            if not email:
+                return jsonify({"error": "email required"}), 400
+            inv      = create_invite(db, email,
+                                     role=data.get("role", "user"),
+                                     team=data.get("team", ""),
+                                     created_by=request.user["id"])
+            base_url = request.host_url.rstrip("/")
+            inv["invite_url"] = f"{base_url}/invite/{inv['token']}"
+            log_audit(db, request.user["id"], request.user.get("email"),
+                      "user.invited", "invite", inv["token"], f"→ {email}")
+            return jsonify(inv), 201
+        return jsonify({"invites": list_invites(db)})
+
+    # ── Budget API ────────────────────────────────────────────────────────────
+
+    @app.route("/api/v1/budget/check", methods=["POST"])
+    @require_auth
+    def budget_check():
+        data   = request.get_json(silent=True) or {}
+        uid    = data.get("user_id") or request.user["id"]
+        tokens = int(data.get("input_tokens", 0))
+        result = check_budget(get_db(), uid, estimated_tokens=tokens)
+        if not result.get("allowed", True):
+            return jsonify(result), 429
+        return jsonify(result)
+
+    @app.route("/api/v1/admin/budgets", methods=["GET"])
+    @require_admin
+    def admin_list_budgets():
+        return jsonify({"budgets": list_budgets(get_db())})
+
+    @app.route("/api/v1/admin/budgets", methods=["POST"])
+    @require_admin
+    def admin_set_budget():
+        db   = get_db()
+        data = request.get_json(silent=True) or {}
+        b    = set_budget(db,
+            owner_type   = data.get("owner_type", "user"),
+            owner_id     = data.get("owner_id"),
+            limit_tokens = data.get("limit_tokens"),
+            limit_usd    = data.get("limit_usd"),
+            period       = data.get("period", "monthly"),
+            alert_pct    = float(data.get("alert_pct", 80)),
+        )
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "budget.created", "budget", str(b.get("id")),
+                  f"{data.get('owner_type')}:{data.get('owner_id')}")
+        return jsonify({"budget": b}), 201
+
+    @app.route("/api/v1/admin/budgets/<int:budget_id>", methods=["DELETE"])
+    @require_admin
+    def admin_delete_budget(budget_id):
+        db = get_db()
+        delete_budget(db, budget_id)
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "budget.deleted", "budget", str(budget_id))
+        return jsonify({"deleted": True})
+
+    # ── Webhook API ───────────────────────────────────────────────────────────
+
+    @app.route("/api/v1/admin/webhooks", methods=["GET"])
+    @require_admin
+    def admin_list_webhooks():
+        return jsonify({"webhooks": list_webhooks(get_db())})
+
+    @app.route("/api/v1/admin/webhooks", methods=["POST"])
+    @require_admin
+    def admin_create_webhook():
+        db   = get_db()
+        data = request.get_json(silent=True) or {}
+        url  = data.get("url", "").strip()
+        if not url:
+            return jsonify({"error": "url required"}), 400
+        wh = create_webhook(db, request.user["id"],
+            url     = url,
+            channel = data.get("channel", "http"),
+            events  = data.get("events", "budget.warning,budget.exceeded"),
+            secret  = data.get("secret", ""),
+        )
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "webhook.created", "webhook", str(wh.get("id")), url)
+        return jsonify({"webhook": wh}), 201
+
+    @app.route("/api/v1/admin/webhooks/<int:webhook_id>", methods=["DELETE"])
+    @require_admin
+    def admin_delete_webhook(webhook_id):
+        db = get_db()
+        delete_webhook(db, webhook_id)
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "webhook.deleted", "webhook", str(webhook_id))
+        return jsonify({"deleted": True})
+
+    # ── Export API ────────────────────────────────────────────────────────────
+
+    @app.route("/api/v1/export/events.csv")
+    @require_auth
+    def export_events_csv():
+        import csv, io
+        db    = get_db()
+        days  = int(request.args.get("days", 30))
+        uid   = None if request.user["role"] == "admin" else request.user["id"]
+        rows  = query_events(db, days=days, user_id=uid, limit=10000)
+        buf   = io.StringIO()
+        if rows:
+            w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        from flask import Response
+        return Response(
+            buf.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=skim-events-{days}d.csv"},
+        )
+
+    @app.route("/api/v1/export/summary.json")
+    @require_auth
+    def export_summary_json():
+        import datetime as _dt
+        db   = get_db()
+        days = int(request.args.get("days", 30))
+        uid  = None if request.user["role"] == "admin" else request.user["id"]
+        return jsonify({
+            "generated_at": _dt.datetime.utcnow().isoformat() + "Z",
+            "period_days":  days,
+            "summary":      stats_summary(db, days, user_id=uid),
+            "by_day":       stats_by_day(db, days),
+            "by_model":     stats_by_model(db, days),
+        })
+
+    # ── Audit API ─────────────────────────────────────────────────────────────
+
+    @app.route("/api/v1/admin/audit")
+    @require_admin
+    def admin_audit():
+        days   = int(request.args.get("days", 30))
+        action = request.args.get("action")
+        limit  = min(int(request.args.get("limit", 200)), 1000)
+        return jsonify({"log": get_audit_log(get_db(), days, action, limit)})
+
+    # ── Admin API ─────────────────────────────────────────────────────────────
 
     @app.route("/api/v1/admin/users")
     @require_admin
     def admin_list_users():
-        from server.db import list_users
         users = list_users(get_db())
         return jsonify({"users": [_safe_user(u) for u in users]})
 
     @app.route("/api/v1/admin/users", methods=["POST"])
     @require_admin
     def admin_create_user():
+        db   = get_db()
         data = request.get_json(silent=True) or {}
         if not data.get("email"):
             return jsonify({"error": "email required"}), 400
-        pw = data.get("password", "")
+        pw   = data.get("password", "")
         user = create_user(
-            get_db(),
+            db,
             email=data["email"],
             name=data.get("name", ""),
             team=data.get("team", ""),
             role=data.get("role", "user"),
             password_hash=hash_password(pw) if pw else "",
         )
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "user.created", "user", user["id"], data["email"])
         return jsonify({"user": _safe_user(user)}), 201
+
+    @app.route("/api/v1/admin/users/<user_id>", methods=["DELETE"])
+    @require_admin
+    def admin_delete_user(user_id):
+        db = get_db()
+        u  = get_user_by_id(db, user_id)
+        if not u:
+            return jsonify({"error": "User not found"}), 404
+        delete_user(db, user_id)
+        log_audit(db, request.user["id"], request.user.get("email"),
+                  "user.deleted", "user", user_id, u.get("email"))
+        return jsonify({"deleted": True})
 
     @app.route("/api/v1/health")
     def health():

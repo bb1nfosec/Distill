@@ -136,6 +136,36 @@ _ticker_on  = True
 
 # ── Event reporting (local store + SSE + optional remote server) ──────────────
 
+def _budget_check(estimated_tokens: int) -> tuple[bool, str]:
+    """
+    Call skim server budget check before forwarding.
+    Returns (allowed, error_message). Fails open on timeout or connection error.
+    Only runs when SKIM_SERVER_URL + SKIM_SERVER_TOKEN are set.
+    """
+    url   = os.environ.get("SKIM_SERVER_URL", "").rstrip("/")
+    token = os.environ.get("SKIM_SERVER_TOKEN", "")
+    if not url or not token:
+        return True, ""
+    try:
+        data = json.dumps({"input_tokens": estimated_tokens}).encode()
+        req  = urllib.request.Request(f"{url}/api/v1/budget/check", data=data, method="POST")
+        req.add_header("Content-Type",  "application/json")
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=0.2) as r:
+            resp = json.loads(r.read())
+            return resp.get("allowed", True), resp.get("reason", "")
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            try:
+                body = json.loads(e.read())
+                return False, body.get("reason", "Budget exceeded")
+            except Exception:
+                return False, "Budget exceeded"
+    except Exception:
+        pass  # fail open — never block on server timeout
+    return True, ""
+
+
 def _report_local(event: dict) -> None:
     if _LOCAL_STORE_OK:
         try:
@@ -591,6 +621,18 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self._send(401, b'{"error": "No Anthropic auth: set ANTHROPIC_API_KEY (API plan) or start via Claude Pro login (OAuth plan)"}')
             return
 
+        # Budget enforcement (enterprise only — no-op when SKIM_SERVER_URL not set)
+        estimated = _tok(" ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in body.get("messages", [])
+        ))
+        allowed, reason = _budget_check(estimated)
+        if not allowed:
+            self._send(429, json.dumps({
+                "error": {"type": "budget_exceeded", "message": reason},
+            }).encode())
+            return
+
         t0 = time.time()
 
         # Waste filtering — all plans benefit
@@ -732,6 +774,18 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         )
         if not api_key:
             self._send(401, b'{"error": "OPENAI_API_KEY not set"}')
+            return
+
+        # Budget enforcement
+        estimated = _tok(" ".join(
+            m.get("content", "") if isinstance(m.get("content"), str) else ""
+            for m in body.get("messages", [])
+        ))
+        allowed, reason = _budget_check(estimated)
+        if not allowed:
+            self._send(429, json.dumps({
+                "error": {"type": "budget_exceeded", "message": reason},
+            }).encode())
             return
 
         t0 = time.time()

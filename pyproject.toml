@@ -70,6 +70,7 @@ skim-server     = "server.app:main"
 skim-secrets    = "core.secrets_detector:main"
 skim-audit      = "core.audit:main"
 skim-mcp        = "skim_mcp.server:main"
+skim-admin      = "core.cli:main"
 
 [tool.setuptools.packages.find]
 where   = ["."]

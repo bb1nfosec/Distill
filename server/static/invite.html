@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>skim — Accept Invite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+<style>
+:root { --bg:#0a0c10; --surface:#111318; --border:#1e2130; --border2:#252a3a;
+        --text:#e4e6f0; --muted:#6b7280; --accent:#6c63ff; --success:#00d4aa;
+        --danger:#ff4d6d; }
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif;
+       min-height:100vh; display:flex; align-items:center; justify-content:center;
+       -webkit-font-smoothing:antialiased; }
+.box { background:var(--surface); border:1px solid var(--border2); border-radius:14px;
+       padding:40px; width:400px; box-shadow:0 4px 24px rgba(0,0,0,.5); }
+.logo { display:flex; align-items:center; gap:10px; margin-bottom:24px; }
+.logo-icon { width:32px; height:32px; background:var(--accent); border-radius:8px;
+             display:flex; align-items:center; justify-content:center; }
+.logo-icon svg { width:18px; height:18px; color:#fff; }
+.logo-name { font-size:20px; font-weight:800; letter-spacing:-.5px; }
+.invite-badge { display:flex; align-items:center; gap:8px; background:rgba(0,212,170,.08);
+                border:1px solid rgba(0,212,170,.2); border-radius:8px;
+                padding:12px 14px; margin-bottom:24px; }
+.invite-badge svg { width:18px; height:18px; color:var(--success); flex-shrink:0; }
+.invite-text { font-size:13px; line-height:1.5; }
+.invite-text strong { color:var(--success); }
+h2 { font-size:18px; font-weight:700; margin-bottom:6px; letter-spacing:-.3px; }
+.sub { color:var(--muted); font-size:13px; margin-bottom:24px; }
+.field { margin-bottom:16px; }
+.field label { display:block; font-size:11px; font-weight:700; color:var(--muted);
+               text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+.field input { width:100%; background:var(--bg); border:1px solid var(--border2);
+               color:var(--text); padding:10px 12px; border-radius:8px;
+               font-size:14px; font-family:'Inter',system-ui,sans-serif; }
+.field input:focus { outline:none; border-color:var(--accent); }
+.field input::placeholder { color:var(--muted); }
+.field input:disabled { opacity:.5; cursor:not-allowed; }
+.btn { width:100%; padding:11px; background:var(--accent); color:#fff; border:none;
+       border-radius:8px; font-size:14px; font-weight:700; font-family:'Inter',system-ui,sans-serif;
+       cursor:pointer; margin-top:8px; transition:background .12s; }
+.btn:hover { background:#5a52e0; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.err { color:var(--danger); font-size:12px; margin-top:10px; display:none; }
+.err.show { display:block; }
+.success { text-align:center; display:none; }
+.success-icon { width:56px; height:56px; background:rgba(0,212,170,.1); border-radius:50%;
+                margin:0 auto 16px; display:flex; align-items:center; justify-content:center; }
+.success-icon svg { width:28px; height:28px; color:var(--success); }
+.success h2 { color:var(--success); margin-bottom:8px; }
+.success p { color:var(--muted); font-size:13px; margin-bottom:20px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">
+    <div class="logo-icon"><i data-lucide="zap"></i></div>
+    <span class="logo-name">skim</span>
+  </div>
+
+  <div id="form-view">
+    <div class="invite-badge">
+      <i data-lucide="mail"></i>
+      <div class="invite-text">
+        You've been invited to join <strong>skim Token Intelligence</strong>.<br>
+        Set a password to activate your account.
+      </div>
+    </div>
+
+    <h2>Create your account</h2>
+    <div class="sub" id="invite-sub">Loading invite details…</div>
+
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="email" disabled/>
+    </div>
+    <div class="field">
+      <label>Your name</label>
+      <input type="text" id="name" placeholder="Jane Smith" autocomplete="name"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="pw" placeholder="Min 8 characters" autocomplete="new-password"/>
+    </div>
+    <div class="field">
+      <label>Confirm password</label>
+      <input type="password" id="pw2" placeholder="Repeat password" autocomplete="new-password"/>
+    </div>
+    <div class="err" id="err"></div>
+    <button class="btn" id="submit-btn" onclick="register()">Create account</button>
+  </div>
+
+  <div class="success" id="success-view">
+    <div class="success-icon"><i data-lucide="check-circle-2"></i></div>
+    <h2>Account created!</h2>
+    <p>You're all set. Redirecting to the dashboard…</p>
+  </div>
+</div>
+
+<script>
+lucide.createIcons();
+
+const API   = window.location.origin;
+const TOKEN = window.location.pathname.split("/").pop();
+
+async function loadInvite() {
+  try {
+    const r = await fetch(`${API}/api/v1/admin/invites`);
+    // We can't read the invite without auth — just extract email from URL if possible
+  } catch {}
+  // Rely on the registration call to validate the token
+  document.getElementById('invite-sub').textContent = 'Enter your details to complete registration.';
+}
+
+async function register() {
+  const name = document.getElementById('name').value.trim();
+  const pw   = document.getElementById('pw').value;
+  const pw2  = document.getElementById('pw2').value;
+  const err  = document.getElementById('err');
+  err.className = 'err';
+
+  if (!name) { showErr('Please enter your name'); return; }
+  if (pw.length < 8) { showErr('Password must be at least 8 characters'); return; }
+  if (pw !== pw2) { showErr('Passwords do not match'); return; }
+
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('submit-btn').textContent = 'Creating account…';
+
+  const r = await fetch(`${API}/api/v1/auth/register`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: TOKEN, name, password: pw}),
+  }).then(r => r.json()).catch(() => null);
+
+  if (!r || r.error) {
+    showErr(r?.error || 'Registration failed. The invite may have expired.');
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('submit-btn').textContent = 'Create account';
+    return;
+  }
+
+  // Success
+  localStorage.setItem('skim_token', r.token);
+  document.getElementById('form-view').style.display = 'none';
+  document.getElementById('success-view').style.display = 'block';
+  lucide.createIcons();
+  setTimeout(() => window.location = '/dashboard', 1800);
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg;
+  el.className = 'err show';
+}
+
+document.getElementById('pw2').addEventListener('keydown', e => {
+  if (e.key === 'Enter') register();
+});
+
+loadInvite();
+</script>
+</body>
+</html>
