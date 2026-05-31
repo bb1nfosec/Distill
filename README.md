@@ -1,36 +1,179 @@
 <div align="center">
 
-# distill
+# skim
 
-**You're probably sending `.env` files to your LLM right now. And paying for it.**
+**The runtime layer between your AI tools and the LLM API.**
 
-[![PyPI](https://img.shields.io/pypi/v/distill-llm?color=0073b7&logo=pypi&logoColor=white)](https://pypi.org/project/distill-llm/)
-[![CI](https://github.com/bb1nfosec/Distill/actions/workflows/ci.yml/badge.svg)](https://github.com/bb1nfosec/Distill/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
-[![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-f59e0b)](pyproject.toml)
+[![PyPI](https://img.shields.io/pypi/v/skim-llm?color=2563eb&logo=pypi&logoColor=white)](https://pypi.org/project/skim-llm/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2563eb?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-059669)](LICENSE)
+[![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-d97706)](pyproject.toml)
 
-[Install](#install) · [CLI](#cli) · [MCP Server](#mcp-server) · [Python API](#python-api) · [Benchmarks](#benchmarks) · [Try Online](https://bb1nfosec.github.io/Distill)
-
-![distill demo](assets/demo.gif)
+[Quickstart](#quickstart) · [Proxy](#proxy--the-core) · [Dashboard](#dashboard) · [CLI](#cli-reference) · [Enterprise](#enterprise) · [Demo](https://demo-mu-ten-60.vercel.app)
 
 </div>
 
 ---
 
-Distill scans your codebase, tells you exactly what's eating your tokens and what it costs, then writes the ignore rules for you.
+Most LLM tools waste tokens invisibly. Claude Code reads a `package-lock.json` (122k tokens, $0.37) before answering a question about a 200-line file. Conversation history compounds quadratically. Your 200k context window fills up silently, quality degrades, and you're flying blind until the model forgets what it was doing.
+
+**skim** sits in the API call path and fixes this in real-time — without touching any code.
 
 ```
-$ distill fix --path ./my-project
+Your tool (Claude Code / Cursor / custom)
+       │
+       ▼
+  skim proxy                    ← one env var activates this
+  ├── strips lock files from tool outputs
+  ├── auto-injects prompt caching (50–90% cheaper)
+  ├── shows live context fill %
+  └── ships usage data to your team dashboard
+       │
+       ▼
+Anthropic / OpenAI / Gemini API
+```
 
+---
+
+## Quickstart
+
+```bash
+pip install skim-llm
+
+# Start the proxy
+skim proxy --port 7474 --path .
+
+# In your shell (or .zshrc / .bashrc):
+export ANTHROPIC_BASE_URL=http://localhost:7474
+
+# That's it. Every Claude Code / Cursor call now goes through skim.
+```
+
+**What you'll see in the terminal:**
+
+```
+[skim] 14:23:01  call #1  1,247ms
+  Context  ████░░░░░░░░░░░░░░░░░░ 12.4%  24.8k/200k
+  This call: 24.8k in / 1.2k out  stripped 122k waste (package-lock.json)
+
+[skim] 14:23:45  call #2  892ms
+  Context  ███████░░░░░░░░░░░░░░░ 38.1%  76.2k/200k
+  This call: 51.4k in / 2.1k out  cache hit 18.6k tokens free
+
+[skim] 14:24:55  call #4  788ms
+  Context  ████████████████░░░░░░ 78.4%  156.8k/200k
+  ⚠  78% full — /compact NOW before quality degrades
+```
+
+---
+
+## Proxy — the core
+
+The proxy is what makes skim different from every other LLM cost tool. They scan files. skim intercepts calls.
+
+### What it does on every API call
+
+**1. Waste filtering**
+Detects lock files, build artifacts, and generated code inside `tool_result` blocks (the content Claude Code gets back when it reads a file) and strips them before they enter context. A `package-lock.json` read that would cost 122k tokens becomes a 12-token note.
+
+**2. Prompt caching auto-injection** (Anthropic only)
+Wraps your system prompt and large context blocks with `cache_control: {"type": "ephemeral"}` automatically. First call: Anthropic caches the content (25% write fee once). Every subsequent call: that content is free. For Claude Code, the CLAUDE.md + project context loads at zero cost on calls 2+. Real savings: 50–90% on system prompt tokens.
+
+**3. Live session health**
+After every call, prints context fill % with a progress bar. Warns at 65%, alerts at 85%. For Claude Code Pro users, this is the visibility you never had.
+
+**4. Actual usage tracking**
+Reads `usage.input_tokens` from the API response — not estimates. Ships real numbers to `~/.skim/audit.log` and optionally to a central team dashboard.
+
+### OpenAI-compatible tools
+
+```bash
+export OPENAI_BASE_URL=http://localhost:7474
+```
+
+Works with anything that uses `openai.OpenAI(base_url=...)`.
+
+---
+
+## Dashboard
+
+For teams, skim includes a web server with login, per-user cost attribution, and budget alerts.
+
+```bash
+# Install web extras
+pip install 'skim-llm[web]'
+
+# Start the server
+SKIM_ADMIN_EMAIL=you@corp.com skim server --host 0.0.0.0 --port 7475
+
+# Open http://localhost:7475/dashboard
+```
+
+Then connect each developer's proxy to it:
+
+```bash
+export SKIM_SERVER_URL=https://skim.corp.internal
+export SKIM_SERVER_TOKEN=sk-skim-...   # generate in Settings
+```
+
+**Auth options:**
+- Local password (default)
+- LDAP / Active Directory: set `SKIM_LDAP_URL` + `SKIM_LDAP_BASE_DN`
+- Google / GitHub / Azure AD / Okta: set `SKIM_OIDC_*` env vars
+
+**Docker:**
+```bash
+docker run -p 7474:7474 -p 7475:7475 \
+  -e SKIM_ADMIN_EMAIL=you@corp.com \
+  -v /data/skim:/data \
+  ghcr.io/bb1nfosec/skim
+```
+
+---
+
+## CLI Reference
+
+```
+skim scan       Audit token costs per file
+skim analyze    Detect waste patterns with severity + auto-fix
+skim fix        Write .llmignore rules — shows before/after savings
+skim check      CI budget gate (exits 1 if over threshold)
+skim generate   Generate .llmignore, .skimrc, CLAUDE.md
+skim secrets    Scan for leaked credentials (AWS, OpenAI, GitHub PAT...)
+skim proxy      Runtime interceptor + query optimizer
+skim server     Web dashboard + REST API
+skim audit      View operation log (~/.skim/audit.log)
+skim config     Manage .skimrc configuration
+skim hooks      Install/remove git pre-commit budget gate
+skim baseline   Save/compare token count snapshots
+```
+
+### Static analysis (no API key needed)
+
+```bash
+# See what's eating your tokens and what it costs
+skim scan --path ./my-project
+
+# Find waste patterns with one-line fixes
+skim analyze --path .
+
+# Auto-fix: write .llmignore rules, show before/after
+skim fix --path . --min-severity medium
+
+# Fail CI if project exceeds 30% of model context limit
+skim check --path . --max-pct 30 --fail-on-waste
+```
+
+**Example output — `skim fix`:**
+```
   distill fix  —  ./my-project
   ──────────────────────────────────────────────────────
   Before  : 166.8k tokens  (83.4% ctx)  $0.50/session
 
-  Pattern                    Severity    Tokens saved  Rules added
-  ──────────────────────────────────────────────────────────────────
-  Lock files                 HIGH           160.3k     + 7 rules
-  Test snapshots             HIGH             4.1k     + 2 rules
+  Pattern              Severity    Tokens saved  Rules
+  ────────────────────────────────────────────────────
+  Lock files           HIGH           160.3k     +7
+  Test snapshots       MEDIUM           4.1k     +2
 
   ✓ Written to .llmignore
 
@@ -39,320 +182,131 @@ $ distill fix --path ./my-project
   Now     : 51 sessions / $1
 ```
 
+### Secrets scan
+
+```bash
+# Scan before any LLM touches your codebase
+skim secrets --path . --fail    # exits 1 if findings exist
+```
+
+Detects: AWS Access Key IDs, OpenAI API keys, Anthropic keys, GitHub PATs, private key blocks, Stripe live keys, Slack tokens, JWTs, and generic secrets/passwords.
+
+### Baseline regression (CI)
+
+```bash
+# Save before a refactor
+skim baseline save --name pre-refactor
+
+# Compare after — fails CI if > 5k tokens regressed
+skim baseline compare --name pre-refactor
+```
+
+### Git hook
+
+```bash
+# Block commits that push context over budget
+skim hooks install --max-pct 30 --fail-on-waste
+```
+
 ---
 
-## Why this costs more than you think
+## Enterprise
 
-Every LLM re-reads your full conversation history on every turn. That means cost grows quadratically, not linearly.
-
-```
-Turn  1:   500 (system) +       0 (history) + 200 (msg) =     700 tokens
-Turn  5:   500          +   4,000            + 200       =   4,700 tokens
-Turn 10:   500          +  18,000            + 200       =  18,700 tokens   ← 26× turn 1
-Turn 20:   500          +  76,000            + 200       =  76,700 tokens   ← 109× turn 1
-```
-
-A typical Claude Code session runs 15–20 turns. At Sonnet pricing, a bloated codebase loads costs **$0.23/session** before you type a single character. Multiply by your team.
-
-`package-lock.json` alone is 15,000–120,000 tokens. Every. Single. Session. It's the first thing `distill fix` removes.
+| Need | Solution |
+|------|----------|
+| Cost attribution by team | `skim server` dashboard, per-user breakdown |
+| Budget enforcement | `skim check` in CI + git hooks + proxy hard limits |
+| SSO / LDAP | `SKIM_OIDC_*` + `SKIM_LDAP_*` env vars |
+| Audit trail | `~/.skim/audit.log` + central server ingestion |
+| Self-hosted deployment | Docker image + Helm chart (see `deploy/`) |
+| Secrets governance | `skim secrets --fail` in pre-commit + CI |
+| Regression prevention | `skim baseline compare` in PR pipelines |
+| Air-gapped / Ollama | `--model ollama` — all analysis local, $0.00 |
 
 ---
 
-## Install
+## Configuration
 
-```bash
-pip install "distill-llm[tiktoken]"   # recommended — exact token counts
-pip install "distill-llm[all]"        # + Claude, OpenAI, Gemini adapters + MCP server
-pip install distill-llm               # core only, zero hard dependencies
-```
+Create `.skimrc` in your project root (commit it for team-wide policy):
 
----
-
-## CLI
-
-```bash
-distill scan     --path .                     # see what's burning tokens + dollar cost
-distill analyze  --path .                     # find the waste patterns
-distill fix      --path .                     # write .llmignore rules automatically
-distill check    --path . --max-pct 30        # CI gate — exits 1 if over budget
-distill generate --output . --model all       # generate CLAUDE.md, Modelfile, configs
-```
-
-### scan
-
-Shows every file that would enter your LLM context and its exact token cost.
-
-```bash
-$ distill scan --path ./my-project
-
-  distill — Context Audit
-  ──────────────────────────────────────────────────────────────
-  Model         : claude  ($3.00 / 1M input tokens)
-  Files scanned : 247
-  Total tokens  : 182.4k  (91.2% of context)
-  Per-session $ : $0.5472
-  Sessions / $1 : 1
-
-  File                                        Tokens      Cost
-  ──────────────────────────────────────────  ──────  ──────────
-  package-lock.json                           122.0k    $0.3660
-  tsconfig.tsbuildinfo                        103.2k    $0.3096
-  src/generated/schema.ts                       4.1k    $0.0123
-  src/auth/middleware.ts                        1.8k    $0.0054
-```
-
-### fix
-
-Detects waste patterns, writes the rules, shows before/after.
-
-```bash
-distill fix --path .                     # auto-fix HIGH severity patterns
-distill fix --path . --dry-run           # preview savings without writing
-distill fix --path . --min-severity low  # catch medium/low patterns too
-distill fix --path . --model gpt-4o      # price against GPT-4o instead
-```
-
-### check — CI gate
-
-```bash
-distill check --path . --max-pct 30
-distill check --path . --max-pct 30 --fail-on-waste   # also fail on un-ignored lock files
-distill check --path . --json                          # machine-readable
-```
-
-```yaml
-# .github/workflows/ci.yml
-- name: Token budget gate
-  run: distill check --path . --max-pct 30 --fail-on-waste
-```
-
-### analyze
-
-Deeper report: severity, root cause, and the exact `.llmignore` entry that fixes it.
-
-```bash
-distill analyze --path .          # full report
-distill analyze --path . --fix    # report + apply fixes
-distill analyze --path . --json   # pipe to your own tooling
+```ini
+model         = claude       # claude | openai | gemini | ollama
+max_pct       = 30           # fail CI if context exceeds X% of limit
+fail_on_waste = false        # also fail on HIGH severity patterns
+min_severity  = high         # auto-fix: high | medium | low
+audit         = false        # log every operation to ~/.skim/audit.log
+proxy_port    = 7474
 ```
 
 ---
 
 ## MCP Server
 
-Makes distill a native tool Claude can call on its own — no slash commands, no manual prompting.
-
-```bash
-pip install "distill-llm[mcp]"
-```
-
-Add to `claude_desktop_config.json` or `.mcp.json`:
+Exposes skim as Claude Desktop tools (no CLI needed):
 
 ```json
 {
   "mcpServers": {
-    "distill": { "command": "distill-mcp" }
+    "skim": { "command": "skim-mcp" }
   }
 }
 ```
 
-Claude gets five tools: `scan_tokens`, `analyze_context`, `fix_context`, `check_budget`, `generate_llmignore`. It'll call them when relevant without you asking.
-
-**Claude Code slash commands** — drop `.claude/commands/` into any project:
-
-```
-/distill-scan     token audit with dollar costs
-/distill-analyze  waste pattern detection
-/distill-fix      auto-fix with before/after
-/distill-check    CI budget gate
-/distill-generate generate .llmignore
-```
-
-→ [Full org deployment guide](docs/mcp-setup.md)
+Available tools: `scan_tokens`, `analyze_context`, `check_budget`, `fix_context`, `generate_llmignore`
 
 ---
 
 ## Python API
 
-Same interface across all providers. Swap LLMs by changing one line.
-
 ```python
-from adapters import ClaudeAdapter, OpenAIAdapter, GeminiAdapter, OllamaAdapter
+from adapters import ClaudeAdapter
 
-llm = ClaudeAdapter(model="claude-sonnet-4-5", enable_caching=True)
-# llm = OpenAIAdapter(model="gpt-4o")
-# llm = GeminiAdapter(model="gemini-2.0-flash")   # $0.10/1M, 1M ctx window
-# llm = OllamaAdapter(model="llama3.2", num_ctx=8192)
-
-response = llm.chat("Refactor the auth module to use JWT")
-llm.compact()       # compress history — call between task phases
-llm.print_stats()   # tokens used, cache hit rate, latency
-```
-
-**Prompt caching (Claude)** — static context is cached automatically. Cache hit = 90% cheaper than a fresh read.
-
-**Subagents** — run research in a separate context window so it doesn't pile up in yours:
-
-```python
-summary = claude.run_subagent(
-    task="How does our auth handle token refresh? Any edge cases?",
-    context_files=["src/auth/jwt.ts", "src/middleware/authGuard.ts"]
+claude = ClaudeAdapter(
+    model="claude-sonnet-4-5",
+    system_prompt="You are a terse coding assistant.",
+    enable_caching=True,   # enables prompt caching automatically
 )
-# [Subagent] Research complete — 4,200 tokens used in separate context
-
-response = claude.chat(f"Given: {summary}\nNow add refresh token rotation.")
+response = claude.chat("Refactor the auth module")
+claude.print_stats()
+# Session: 12,400 tokens | Cache hit rate: 87% | Cost: $0.0037
 ```
 
-**Lazy file loading** — warns on oversized files, truncates at a line limit:
-
-```python
-content = llm.load_file_lazy("src/api/routes.ts", max_lines=150)
-# [distill] Loaded src/api/routes.ts: 820 tokens
-
-response = llm.chat(f"Add rate limiting:\n{content}")
-```
-
-**Add any LLM in ~30 lines:**
-
-```python
-from adapters.base_adapter import BaseLLMAdapter, CompletionResult
-
-class MyLLMAdapter(BaseLLMAdapter):
-    def count_tokens(self, text: str) -> int:
-        return len(text) // 4
-
-    def _call_api(self, messages: list[dict], **kwargs) -> CompletionResult:
-        response = my_client.complete(messages)
-        return CompletionResult(
-            content=response.text,
-            input_tokens=response.usage.input,
-            output_tokens=response.usage.output,
-            total_tokens=response.usage.total,
-            model=self.model,
-            latency_ms=response.latency_ms,
-        )
-
-# Gets auto-compact, history management, stats, lazy loading for free
-llm = MyLLMAdapter(model="my-model-v1", auto_compact_threshold=0.70)
-```
+Adapters: `ClaudeAdapter`, `OpenAIAdapter`, `GeminiAdapter`, `OllamaAdapter`
 
 ---
 
-## Benchmarks
-
-Real numbers on real projects.
-
-### Token estimation accuracy
-
-| Sample | Size | Error vs ground truth | Time |
-|---|---:|---:|---:|
-| Inline comment | 41 chars | **0.00%** | 8.5 ms |
-| Full adapter (~8 KB) | 7,768 chars | **0.00%** | 1.1 ms |
-| Lock file slice (50 KB) | 50,000 chars | **0.00%** | 9.7 ms |
-| Large Python file (~35 KB) | 35,000 chars | **0.00%** | 5.0 ms |
-
-### Scan throughput
-
-| Project | Files | Tokens | Time | Throughput |
-|---|---:|---:|---:|---:|
-| distill (this repo) | 26 | 33,374 | 21 ms | 1.62 M tok/s |
-| TradingAgents (Python) | 85 | 85,412 | 51 ms | 1.66 M tok/s |
-| vaathi-main (Next.js) | 520 | 1,876,732 | 1,028 ms | 1.83 M tok/s |
-
-### `distill fix` on a real Next.js project
-
-| | Tokens | Context % |
-|---|---:|---:|
-| Before | 166,800 | 83.4% |
-| After | 6,500 | 3.2% |
-| **Saved** | **160,300** | **96.1% reduction** |
-
-`package-lock.json` (122k tokens), `tsconfig.tsbuildinfo` (103k), test snapshots (4k) — all gone in one command.
-
-### Compaction savings over a 10-turn session
-
-| | Input tokens |
-|---|---:|
-| Without compaction | 37,760 |
-| With compaction at turn 4 | 21,572 |
-| **Saved** | **16,188 (42.9%)** |
+## Install
 
 ```bash
-python3 benchmarks/run_benchmarks.py                  # run on this repo
-python3 benchmarks/run_benchmarks.py --path /yours    # run on your project
+# Core (zero hard deps — scan, analyze, check, fix, proxy)
+pip install skim-llm
+
+# With accurate token counting
+pip install 'skim-llm[tiktoken]'
+
+# With Claude adapter
+pip install 'skim-llm[claude]'
+
+# Web dashboard
+pip install 'skim-llm[web]'
+
+# Enterprise (SSO + LDAP)
+pip install 'skim-llm[web,sso,ldap]'
+
+# Everything
+pip install 'skim-llm[all]'
 ```
 
 ---
 
-## Five habits that cut costs more than any tool
+## Demo
 
-**Batch prompts.** Five sequential turns generate 5× the history. One batched turn generates none.
-```
-❌  "Add validation to login"        ✅  "In one pass:
-    "Now add it to register"              1. Validation on login + register + reset
-    "And password reset too"              2. Standardize error messages
-    "Update error messages"               3. Update affected tests"
-    "Fix the tests"
-```
-
-**`.llmignore` first.** Run `distill fix` once on any project before you start. It takes 10 seconds and saves the most money.
-
-**Keep `CLAUDE.md` lean.** It loads on every single session — every line is a per-session tax forever.
-```
-CLAUDE.md size       Cost/session    Cost over 100 sessions
-───────────────────  ──────────────  ──────────────────────
- 50 lines (~250t)       $0.00075           $0.075
-200 lines (~1kt)        $0.003             $0.30
-500 lines (~2.5kt)      $0.0075            $0.75
-```
-
-**Research in a subagent.** Files you load for research stay in context for the rest of the session. Push them to a subagent and only the summary comes back.
-
-**Compact between tasks.** History never gets cheaper. `/compact` in Claude Code or `llm.compact()` when switching tasks — 42.9% token reduction in a 10-turn session.
-
----
-
-## Supported providers
-
-| Provider | Adapter | Config generated | Notes |
-|---|---|---|---|
-| Claude API | `ClaudeAdapter` | system prompt | Prompt caching — up to 90% cost cut on static context |
-| Claude Code | — | `CLAUDE.md` + `.claudeignore` | Subagents, `/compact`, lean config |
-| GPT-4o / mini | `OpenAIAdapter` | `openai_system.md` | Works with any OpenAI-compatible endpoint |
-| Gemini 2.0 Flash | `GeminiAdapter` | `gemini_system.md` | 1M ctx window, $0.10/1M |
-| Ollama (local) | `OllamaAdapter` | `Modelfile` | `num_ctx` tuning, free |
-| LiteLLM / Groq | `OpenAIAdapter(base_url=...)` | OpenAI-compat | Any proxy |
-
----
-
-## Security note
-
-`.llmignore` blocks `.env`, `.env.*`, `*.pem`, `*.key`, and credential files by default. `distill check --fail-on-waste` in CI catches un-ignored secrets and lock files before they hit a PR. The file itself is checked in and diff-able — treat it like any other security config.
-
----
-
-## Contributing
-
-PRs welcome. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
-
-Most useful right now:
-- `adapters/litellm_adapter.py` — LiteLLM unified proxy support
-- VS Code extension — real-time token counter in the status bar
-- Smarter oversized-file handling in `distill fix`
-- More test coverage
-
----
-
-## License
-
-MIT — [LICENSE](LICENSE)
+Live demo (individual + org/enterprise): **https://demo-mu-ten-60.vercel.app**
 
 ---
 
 <div align="center">
 
-Built after one too many `Claude usage limit reached` messages at 2am.
-
-**If it saved you tokens, drop a ⭐**
+MIT License · [GitHub](https://github.com/bb1nfosec/skim) · [Issues](https://github.com/bb1nfosec/skim/issues) · [Changelog](CHANGELOG.md)
 
 </div>
