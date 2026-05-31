@@ -43,20 +43,21 @@ The runtime layer that sits between your AI tools and the LLM API —
 
 ```mermaid
 flowchart LR
-    A["🤖 Claude Code<br/>Cursor · your app"] -->|ANTHROPIC_BASE_URL| B
+    A["🤖 Claude Code<br/>Cursor · your app"] -->|ANTHROPIC_BASE_URL| B1
 
-    subgraph B ["⚡ skim proxy"]
+    subgraph SKIM ["⚡ skim proxy"]
         direction TB
         B1["✂️ strip lock files<br/>& build artifacts"]
         B2["◈ inject prompt caching<br/>50–90% cheaper"]
         B3["🛡️ enforce budgets<br/>hard 429 block"]
         B4["📊 live dashboard<br/>+ local SQLite"]
+        B1 --> B2 --> B3 --> B4
     end
 
-    B --> C["☁️ Anthropic<br/>OpenAI · Gemini"]
+    B4 --> C["☁️ Anthropic<br/>OpenAI · Gemini"]
 
     style A fill:#161920,stroke:#6c63ff,color:#e4e6f0
-    style B fill:#0d0f14,stroke:#6c63ff,color:#6c63ff
+    style SKIM fill:#0d0f14,stroke:#6c63ff,color:#6c63ff
     style C fill:#161920,stroke:#00d4aa,color:#e4e6f0
     style B1 fill:#161920,stroke:#252a3a,color:#e4e6f0
     style B2 fill:#161920,stroke:#252a3a,color:#e4e6f0
