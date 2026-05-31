@@ -1,0 +1,187 @@
+<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/webpack-100b9e646d9c912e.js"/><script src="/_next/static/chunks/fd9d1056-87da80e0c187477b.js" async=""></script><script src="/_next/static/chunks/117-d03932253f89f664.js" async=""></script><script src="/_next/static/chunks/main-app-02c90cefe6295c44.js" async=""></script><script src="/_next/static/chunks/app/page-984a0a46aa4530f2.js" async=""></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" async=""></script><link rel="preconnect" href="https://fonts.googleapis.com"/><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/><title>skim — Runtime LLM Token Intelligence</title><meta name="description" content="The missing layer between your AI tools and the LLM API. Strips waste in real-time, caches prompts automatically, shows live context fill %, and gives teams a cost dashboard — without changing a line of code."/><meta name="keywords" content="LLM, tokens, Claude, OpenAI, cost optimization, prompt caching, context window, enterprise AI"/><meta property="og:title" content="skim — Runtime LLM Token Intelligence"/><meta property="og:description" content="One env var. Your AI tools stop wasting money."/><meta property="og:type" content="website"/><meta name="twitter:card" content="summary"/><meta name="twitter:title" content="skim — Runtime LLM Token Intelligence"/><meta name="twitter:description" content="One env var. Your AI tools stop wasting money."/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body style="margin:0"><style>
+:root {
+  --bg: #080b10; --surface: #0f1319; --surface2: #151b24;
+  --border: #1e2635; --text: #e1e8f0; --muted: #6b7a90;
+  --accent: #6366f1; --accent2: #06d6a0; --warn: #f59e0b; --red: #ef4444;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans);
+       overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+
+/* Nav */
+.nav { display: flex; align-items: center; justify-content: space-between;
+       padding: 0 40px; height: 60px; border-bottom: 1px solid var(--border);
+       background: rgba(8,11,16,.9); backdrop-filter: blur(12px);
+       position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.nav-links { display: flex; gap: 28px; align-items: center; }
+.nav-link { color: var(--muted); font-size: 14px; transition: color .15s; cursor: pointer; }
+.nav-link:hover { color: var(--text); }
+.nav-cta { background: var(--accent); color: #fff; padding: 8px 18px;
+           border-radius: 8px; font-size: 13px; font-weight: 600;
+           transition: all .15s; }
+.nav-cta:hover { background: #4f46e5; }
+
+/* Hero */
+.hero { text-align: center; padding: 96px 24px 80px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99,102,241,.12) 0%, transparent 70%);
+  pointer-events: none; }
+.hero-badge { display: inline-flex; align-items: center; gap: 8px;
+              background: rgba(99,102,241,.1); border: 1px solid rgba(99,102,241,.25);
+              padding: 5px 14px; border-radius: 999px; font-size: 12px;
+              color: #a5b4fc; margin-bottom: 28px; font-weight: 500; }
+.hero-badge-dot { width: 6px; height: 6px; background: var(--accent2);
+                  border-radius: 50%; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+.hero-title { font-size: clamp(36px, 6vw, 72px); font-weight: 800;
+              letter-spacing: -2px; line-height: 1.1; margin-bottom: 20px; }
+.hero-title em { font-style: normal;
+                 background: linear-gradient(135deg, var(--accent), var(--accent2));
+                 -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero-sub { font-size: clamp(15px, 2vw, 19px); color: var(--muted);
+            max-width: 620px; margin: 0 auto 40px; line-height: 1.7; }
+.hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.btn-primary { background: var(--accent); color: #fff; padding: 13px 28px;
+               border-radius: 10px; font-size: 15px; font-weight: 600;
+               transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }
+.btn-primary:hover { background: #4f46e5; transform: translateY(-1px);
+                     box-shadow: 0 8px 24px rgba(99,102,241,.3); }
+.btn-ghost { color: var(--text); padding: 13px 28px; border-radius: 10px;
+             font-size: 15px; font-weight: 500; border: 1px solid var(--border);
+             transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.hero-stats { display: flex; gap: 48px; justify-content: center; margin-top: 56px;
+              padding-top: 40px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.hero-stat-n { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+.hero-stat-l { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.green { color: var(--accent2); }
+.purple { color: var(--accent); }
+.warn { color: var(--warn); }
+
+/* Tabs */
+.tabs-wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+.tabs-header { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+.tab { padding: 14px 28px; font-size: 15px; font-weight: 600; cursor: pointer;
+       color: var(--muted); border-bottom: 2px solid transparent;
+       transition: all .15s; }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab-pane { display: none; }
+.tab-pane.active { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+
+/* Terminal */
+.terminal-wrap { flex: 1; min-width: 320px; }
+.terminal { background: #0a0c10; border: 1px solid var(--border); border-radius: 12px;
+            overflow: hidden; font-family: var(--mono); font-size: 13px; }
+.term-bar { background: var(--surface); padding: 10px 14px; display: flex;
+            align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+.term-dot { width: 11px; height: 11px; border-radius: 50%; }
+.term-title { margin-left: auto; font-size: 11px; color: var(--muted);
+              font-family: var(--sans); }
+.term-body { padding: 18px 20px; min-height: 360px; }
+.term-line { line-height: 1.8; white-space: pre-wrap; word-break: break-all; }
+.tc-muted  { color: var(--muted); }
+.tc-green  { color: var(--accent2); }
+.tc-yellow { color: var(--warn); }
+.tc-red    { color: var(--red); }
+.tc-blue   { color: #60a5fa; }
+.tc-purple { color: #a5b4fc; }
+.tc-white  { color: var(--text); }
+.tc-bold   { font-weight: 700; }
+.cursor    { display: inline-block; width: 8px; height: 14px;
+             background: var(--accent2); animation: blink 1s step-end infinite;
+             vertical-align: text-bottom; margin-left: 2px; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* Info panel */
+.info-panel { flex: 1; min-width: 280px; }
+.info-title { font-size: 26px; font-weight: 800; letter-spacing: -0.5px;
+              margin-bottom: 16px; line-height: 1.3; }
+.info-desc { color: var(--muted); font-size: 15px; line-height: 1.7; margin-bottom: 28px; }
+.info-steps { display: flex; flex-direction: column; gap: 20px; margin-bottom: 32px; }
+.step { display: flex; gap: 14px; align-items: flex-start; }
+.step-n { width: 28px; height: 28px; border-radius: 50%; background: rgba(99,102,241,.15);
+          border: 1px solid rgba(99,102,241,.3); display: flex; align-items: center;
+          justify-content: center; font-size: 12px; font-weight: 700; color: var(--accent);
+          flex-shrink: 0; margin-top: 1px; }
+.step-text strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.step-text span { color: var(--muted); font-size: 13px; }
+.cmd-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+           padding: 12px 16px; font-family: var(--mono); font-size: 13px;
+           color: var(--accent2); margin-top: 6px; }
+
+/* Feature grid */
+.features { max-width: 1100px; margin: 0 auto; padding: 0 24px 96px; }
+.features-title { font-size: clamp(24px, 3vw, 36px); font-weight: 800;
+                  letter-spacing: -0.5px; text-align: center; margin-bottom: 48px; }
+.feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+                padding: 24px; transition: all .2s; }
+.feature-card:hover { border-color: rgba(99,102,241,.3); transform: translateY(-2px); }
+.feature-icon { font-size: 28px; margin-bottom: 14px; }
+.feature-name { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.feature-desc { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+/* CTA bar */
+.cta-bar { background: linear-gradient(135deg, rgba(99,102,241,.08), rgba(6,214,160,.05));
+           border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+           padding: 64px 24px; text-align: center; }
+.cta-title { font-size: clamp(22px, 3vw, 36px); font-weight: 800; margin-bottom: 12px;
+             letter-spacing: -0.5px; }
+.cta-sub { color: var(--muted); font-size: 15px; margin-bottom: 32px; }
+.install-box { display: inline-flex; align-items: center; gap: 12px;
+               background: var(--surface); border: 1px solid var(--border);
+               border-radius: 10px; padding: 14px 20px; font-family: var(--mono);
+               font-size: 14px; cursor: pointer; transition: all .15s; }
+.install-box:hover { border-color: var(--accent); }
+.install-copy { background: none; border: none; color: var(--muted); cursor: pointer;
+                font-size: 16px; padding: 0; }
+
+/* Org dashboard */
+.org-dashboard { background: var(--surface); border: 1px solid var(--border);
+                 border-radius: 14px; padding: 24px; flex: 1.2; min-width: 320px; }
+.dash-header { display: flex; justify-content: space-between; align-items: center;
+               margin-bottom: 20px; }
+.dash-title { font-size: 15px; font-weight: 700; }
+.dash-badge { background: rgba(6,214,160,.1); color: var(--accent2);
+              padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+.dash-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.dash-card { background: var(--bg); border: 1px solid var(--border);
+             border-radius: 10px; padding: 14px; }
+.dash-card-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+                   letter-spacing: .5px; margin-bottom: 6px; }
+.dash-card-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.chart-wrap { height: 180px; position: relative; margin-bottom: 20px; }
+.user-rows { display: flex; flex-direction: column; gap: 10px; }
+.user-row { display: flex; align-items: center; gap: 12px; }
+.user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+               display: flex; align-items: center; justify-content: center;
+               font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.user-bar-wrap { flex: 1; }
+.user-bar { height: 5px; border-radius: 3px; transition: width 1s ease; }
+.user-name { font-size: 12px; font-weight: 600; }
+.user-tokens { font-size: 11px; color: var(--muted); }
+
+/* Footer */
+footer { padding: 32px 40px; border-top: 1px solid var(--border);
+         display: flex; justify-content: space-between; align-items: center;
+         flex-wrap: wrap; gap: 16px; }
+.footer-logo { font-size: 15px; font-weight: 800; color: var(--muted); }
+.footer-links { display: flex; gap: 24px; }
+.footer-link { color: var(--muted); font-size: 13px; }
+.footer-link:hover { color: var(--text); }
+
+@media (max-width: 768px) {
+  .nav { padding: 0 20px; }
+  .nav-links { gap: 16px; }
+  .hero { padding: 60px 20px 60px; }
+  .hero-stats { gap: 28px; }
+  .tab-pane.active { flex-direction: column; }
+  footer { flex-direction: column; text-align: center; }
+}
+</style><nav class="nav"><div class="nav-logo">skim</div><div class="nav-links"><span class="nav-link">Individual</span><span class="nav-link">Enterprise</span><a class="nav-link" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener">GitHub ↗</a><a class="nav-cta" href="https://github.com/bb1nfosec/skim#install">Get started</a></div></nav><div class="hero"><div class="hero-badge"><div class="hero-badge-dot"></div>Runtime token proxy — open source</div><h1 class="hero-title">Stop guessing what&#x27;s<br/><em>killing your context window</em></h1><p class="hero-sub">skim sits between your AI tools and the LLM API. It strips token waste in real-time, auto-injects prompt caching, shows live context fill %, and gives teams a cost dashboard — with one environment variable.</p><div class="hero-actions"><a class="btn-primary" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener">★ Star on GitHub</a><button class="btn-ghost">$ pip install skim-llm</button></div><div class="hero-stats"><div><div class="hero-stat-n green">96%</div><div class="hero-stat-l">context reduction</div></div><div><div class="hero-stat-n purple">0</div><div class="hero-stat-l">code changes needed</div></div><div><div class="hero-stat-n warn">50–90%</div><div class="hero-stat-l">cost savings via prompt caching</div></div><div><div class="hero-stat-n" style="color:#60a5fa">MIT</div><div class="hero-stat-l">free &amp; open source</div></div></div></div><div class="tabs-wrap"><div class="tabs-header"><div class="tab active">👤 Individual (Claude Code Pro)</div><div class="tab">🏢 Team / Enterprise</div></div><div class="tab-pane active"><div class="terminal-wrap"><div class="terminal"><div class="term-bar"><div class="term-dot" style="background:#ff5f57"></div><div class="term-dot" style="background:#ffbd2e"></div><div class="term-dot" style="background:#28ca41"></div><span class="term-title">Terminal — skim proxy</span></div><div class="term-body" style="overflow-y:auto;max-height:380px"></div></div></div><div class="info-panel"><h2 class="info-title">See your context window<br/>fill up in real-time</h2><p class="info-desc">Claude Code Pro users hit a hidden problem: context fills up silently. Quality degrades before you notice. skim shows you exactly when to /compact — and strips waste before it counts.</p><div class="info-steps"><div class="step"><div class="step-n">1</div><div class="step-text"><strong>Install skim</strong><span>Zero hard dependencies. Runs with Python 3.10+.</span><div class="cmd-box">pip install skim-llm</div></div></div><div class="step"><div class="step-n">2</div><div class="step-text"><strong>Start the proxy</strong><div class="cmd-box">skim proxy --port 7474 --path .</div></div></div><div class="step"><div class="step-n">3</div><div class="step-text"><strong>Point Claude Code at it</strong><span>Every API call now goes through skim — fully transparent.</span><div class="cmd-box">export ANTHROPIC_BASE_URL=http://localhost:7474</div></div></div></div><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn-primary" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener" style="font-size:14px;padding:10px 20px">Read the docs ↗</a></div></div></div><div class="tab-pane"><div class="info-panel"><h2 class="info-title">Cost attribution +<br/>budget enforcement<br/>for your whole org</h2><p class="info-desc">500 developers, all using Claude. Zero visibility. skim gives you a per-developer, per-team cost dashboard, budget alerts, and hard enforcement — without touching anyone&#x27;s code.</p><div class="info-steps"><div class="step"><div class="step-n">1</div><div class="step-text"><strong>Deploy the skim server</strong><div class="cmd-box">docker run -p 7475:7475 -e SKIM_ADMIN_EMAIL=you@corp.com ghcr.io/bb1nfosec/skim</div></div></div><div class="step"><div class="step-n">2</div><div class="step-text"><strong>Configure each developer&#x27;s proxy</strong><span>One env var each. SSO, LDAP, and Azure AD supported.</span><div class="cmd-box">export SKIM_SERVER_URL=https://skim.corp.internal</div></div></div><div class="step"><div class="step-n">3</div><div class="step-text"><strong>Open the dashboard</strong><span>Real-time token usage, cost trends, per-user breakdown, budget alerts.</span></div></div></div><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="btn-primary" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener" style="font-size:14px;padding:10px 20px">See the docs ↗</a><a class="btn-ghost" href="https://github.com/bb1nfosec/skim/issues" target="_blank" rel="noopener" style="font-size:14px;padding:10px 20px">Request a feature</a></div></div></div></div><div class="features"><h2 class="features-title">Everything in one tool</h2><div class="feature-grid"><div class="feature-card"><div class="feature-icon">⚡</div><div class="feature-name">Runtime proxy</div><div class="feature-desc">Intercepts every LLM API call. Strips waste, injects caching, shows context fill %. Works with Claude Code, Cursor, and any OpenAI-compatible tool.</div></div><div class="feature-card"><div class="feature-icon">💰</div><div class="feature-name">Prompt caching auto-inject</div><div class="feature-desc">Automatically adds cache_control to your system prompts and large context blocks. Claude caches them — you pay 90% less on repeat calls.</div></div><div class="feature-card"><div class="feature-icon">📊</div><div class="feature-name">Web dashboard</div><div class="feature-desc">Token usage over time, cost by model, per-user attribution, budget status. Self-hosted with Docker. JWT auth + SSO / LDAP / Azure AD.</div></div><div class="feature-card"><div class="feature-icon">🔑</div><div class="feature-name">Secrets detection</div><div class="feature-desc">Scans for AWS keys, OpenAI tokens, GitHub PATs, and private keys before they reach an LLM. Runs in CI with --fail for hard blocks.</div></div><div class="feature-card"><div class="feature-icon">🔒</div><div class="feature-name">CI budget gate</div><div class="feature-desc">skim check exits 1 if the project is over its token budget. Drop into any GitHub Actions / GitLab CI pipeline in 3 lines.</div></div><div class="feature-card"><div class="feature-icon">📐</div><div class="feature-name">Baseline regression</div><div class="feature-desc">Save a token count snapshot before a refactor. Compare after. Get a clear diff — so PR reviews catch context bloat before it ships.</div></div></div></div><div class="cta-bar"><div class="cta-title">Start in 30 seconds</div><div class="cta-sub">Open source. Self-hostable. No account required.</div><div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap"><button class="install-box"><span style="color:#06d6a0">$</span><span> pip install skim-llm</span><button class="install-copy" title="Copy">⎘</button></button><a class="btn-primary" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener">View on GitHub →</a></div></div><footer><div class="footer-logo">skim — MIT License</div><div class="footer-links"><a class="footer-link" href="https://github.com/bb1nfosec/skim" target="_blank" rel="noopener">GitHub</a><a class="footer-link" href="https://github.com/bb1nfosec/skim/issues" target="_blank" rel="noopener">Issues</a><a class="footer-link" href="https://github.com/bb1nfosec/skim/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></div></footer><script src="/_next/static/chunks/webpack-100b9e646d9c912e.js" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0]);self.__next_f.push([2,null])</script><script>self.__next_f.push([1,"1:I[2846,[],\"\"]\n3:I[9107,[],\"ClientPageRoot\"]\n4:I[7340,[\"931\",\"static/chunks/app/page-984a0a46aa4530f2.js\"],\"default\",1]\n5:I[4707,[],\"\"]\n6:I[6423,[],\"\"]\n8:I[1060,[],\"\"]\n9:[]\n"])</script><script>self.__next_f.push([1,"0:[\"$\",\"$L1\",null,{\"buildId\":\"jUfqeVo3ZfVosuA056L4-\",\"assetPrefix\":\"\",\"urlParts\":[\"\",\"\"],\"initialTree\":[\"\",{\"children\":[\"__PAGE__\",{}]},\"$undefined\",\"$undefined\",true],\"initialSeedData\":[\"\",{\"children\":[\"__PAGE__\",{},[[\"$L2\",[\"$\",\"$L3\",null,{\"props\":{\"params\":{},\"searchParams\":{}},\"Component\":\"$4\"}],null],null],null]},[[null,[\"$\",\"html\",null,{\"lang\":\"en\",\"children\":[[\"$\",\"head\",null,{\"children\":[[\"$\",\"link\",null,{\"rel\":\"preconnect\",\"href\":\"https://fonts.googleapis.com\"}],[\"$\",\"link\",null,{\"rel\":\"preconnect\",\"href\":\"https://fonts.gstatic.com\",\"crossOrigin\":\"anonymous\"}],[\"$\",\"link\",null,{\"href\":\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800\u0026family=JetBrains+Mono:wght@400;500\u0026display=swap\",\"rel\":\"stylesheet\"}],[\"$\",\"script\",null,{\"src\":\"https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js\",\"async\":true}]]}],[\"$\",\"body\",null,{\"style\":{\"margin\":0},\"children\":[\"$\",\"$L5\",null,{\"parallelRouterKey\":\"children\",\"segmentPath\":[\"children\"],\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L6\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"}],[\"$\",\"div\",null,{\"style\":{\"fontFamily\":\"system-ui,\\\"Segoe UI\\\",Roboto,Helvetica,Arial,sans-serif,\\\"Apple Color Emoji\\\",\\\"Segoe UI Emoji\\\"\",\"height\":\"100vh\",\"textAlign\":\"center\",\"display\":\"flex\",\"flexDirection\":\"column\",\"alignItems\":\"center\",\"justifyContent\":\"center\"},\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}}],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":{\"display\":\"inline-block\",\"margin\":\"0 20px 0 0\",\"padding\":\"0 23px 0 0\",\"fontSize\":24,\"fontWeight\":500,\"verticalAlign\":\"top\",\"lineHeight\":\"49px\"},\"children\":\"404\"}],[\"$\",\"div\",null,{\"style\":{\"display\":\"inline-block\"},\"children\":[\"$\",\"h2\",null,{\"style\":{\"fontSize\":14,\"fontWeight\":400,\"lineHeight\":\"49px\",\"margin\":0},\"children\":\"This page could not be found.\"}]}]]}]}]],\"notFoundStyles\":[]}]}]]}]],null],null],\"couldBeIntercepted\":false,\"initialHead\":[null,\"$L7\"],\"globalErrorComponent\":\"$8\",\"missingSlots\":\"$W9\"}]\n"])</script><script>self.__next_f.push([1,"7:[[\"$\",\"meta\",\"0\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}],[\"$\",\"meta\",\"1\",{\"charSet\":\"utf-8\"}],[\"$\",\"title\",\"2\",{\"children\":\"skim — Runtime LLM Token Intelligence\"}],[\"$\",\"meta\",\"3\",{\"name\":\"description\",\"content\":\"The missing layer between your AI tools and the LLM API. Strips waste in real-time, caches prompts automatically, shows live context fill %, and gives teams a cost dashboard — without changing a line of code.\"}],[\"$\",\"meta\",\"4\",{\"name\":\"keywords\",\"content\":\"LLM, tokens, Claude, OpenAI, cost optimization, prompt caching, context window, enterprise AI\"}],[\"$\",\"meta\",\"5\",{\"property\":\"og:title\",\"content\":\"skim — Runtime LLM Token Intelligence\"}],[\"$\",\"meta\",\"6\",{\"property\":\"og:description\",\"content\":\"One env var. Your AI tools stop wasting money.\"}],[\"$\",\"meta\",\"7\",{\"property\":\"og:type\",\"content\":\"website\"}],[\"$\",\"meta\",\"8\",{\"name\":\"twitter:card\",\"content\":\"summary\"}],[\"$\",\"meta\",\"9\",{\"name\":\"twitter:title\",\"content\":\"skim — Runtime LLM Token Intelligence\"}],[\"$\",\"meta\",\"10\",{\"name\":\"twitter:description\",\"content\":\"One env var. Your AI tools stop wasting money.\"}]]\n2:null\n"])</script></body></html>

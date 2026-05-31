@@ -1,78 +1,87 @@
 #!/usr/bin/env python3
 """
-proxy.py — Runtime token interceptor.
+proxy.py — Runtime token interceptor + query optimizer.
 
 Sits between any LLM tool (Claude Code, Cursor, custom apps) and the
-real Anthropic / OpenAI API. Applies .llmignore rules to context in
-real-time, strips known waste patterns from tool outputs, tracks actual
-token usage, and shows live session health.
+Anthropic / OpenAI API. On every request it:
+
+  1. Filters waste — strips lock files / build artifacts from tool results
+  2. Injects prompt caching — adds cache_control to system prompt and large
+     context blocks (Anthropic only). First call writes the cache, all
+     subsequent calls read it — typically 50-90% cheaper on repeated context.
+  3. Tracks actual token usage from API responses (not estimates).
+  4. Passes through streaming SSE responses without buffering.
+  5. Shows live session health in the console.
 
 Usage:
     skim proxy [--port 7474] [--path .] [--model claude]
 
-Then set in your shell (persists for the terminal session):
+Then:
     export ANTHROPIC_BASE_URL=http://localhost:7474
-
-For Claude Code Pro users: the console shows context fill % in real-time
-so you know when to /compact before quality degrades.
+    export OPENAI_BASE_URL=http://localhost:7474
 
 Endpoints:
     GET  /health                → session stats JSON
-    POST /v1/messages           → Anthropic Messages API (pass-through + filter)
-    POST /v1/chat/completions   → OpenAI Chat API (pass-through)
+    POST /v1/messages           → Anthropic Messages API
+    POST /v1/chat/completions   → OpenAI Chat API
 """
 
 import json
 import os
 import sys
 import time
-import urllib.request
-import urllib.error
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Lock
 
+import urllib.request
+import urllib.error
+
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Signatures that reliably identify lock-file / build-artifact content.
-# Each entry: (waste_label, [required_substrings — all must appear])
 _WASTE_SIGNATURES = [
-    ("package-lock.json", ['"lockfileVersion"', '"resolved": "https://']),
-    ("yarn.lock",         ["# yarn lockfile v1", "resolved"]),
-    ("pnpm-lock.yaml",    ["lockfileVersion:", "resolution:"]),
-    ("Cargo.lock",        ["# This file is automatically @generated", "[[package]]"]),
-    ("poetry.lock",       ["# This file is automatically @generated", "[[package]]"]),
-    ("composer.lock",     ['"content-hash":', '"packages":']),
+    ("package-lock.json", ['"lockfileVersion"',    '"resolved": "https://']),
+    ("yarn.lock",         ["# yarn lockfile v1",   "resolved"]),
+    ("pnpm-lock.yaml",    ["lockfileVersion:",      "resolution:"]),
+    ("Cargo.lock",        ["@generated",            "[[package]]"]),
+    ("poetry.lock",       ["@generated",            "[[package]]"]),
+    ("composer.lock",     ['"content-hash":',       '"packages":']),
 ]
 
 
 class _SessionState:
     def __init__(self):
-        self.total_input  = 0
-        self.total_output = 0
-        self.total_saved  = 0
-        self.calls        = 0
-        self._lock        = Lock()
+        self.calls          = 0
+        self.total_input    = 0
+        self.total_output   = 0
+        self.total_saved    = 0
+        self.total_cached   = 0
+        self._lock          = Lock()
 
-    def record(self, inp: int, out: int, saved: int) -> None:
+    def record(self, inp: int, out: int, saved: int, cached: int = 0) -> None:
         with self._lock:
+            self.calls        += 1
             self.total_input  += inp
             self.total_output += out
             self.total_saved  += saved
-            self.calls        += 1
+            self.total_cached += cached
 
 
 _session = _SessionState()
 
 
-def _estimate_tokens(text: str) -> int:
+# ── Token estimation ──────────────────────────────────────────────────────────
+
+def _tok(text: str) -> int:
     try:
         import tiktoken
         return len(tiktoken.get_encoding("cl100k_base").encode(text))
     except ImportError:
         return max(1, len(text) // 4)
 
+
+# ── Waste detection ───────────────────────────────────────────────────────────
 
 def _detect_waste(content: str) -> tuple[bool, str]:
     for label, sigs in _WASTE_SIGNATURES:
@@ -82,10 +91,7 @@ def _detect_waste(content: str) -> tuple[bool, str]:
 
 
 def _filter_messages(messages: list) -> tuple[list, int]:
-    """Strip waste from tool_result blocks. Returns (filtered, tokens_saved)."""
-    if not messages:
-        return messages, 0
-
+    """Strip known waste from tool_result blocks. Returns (filtered, tokens_saved)."""
     saved = 0
     out = []
     for msg in messages:
@@ -93,7 +99,6 @@ def _filter_messages(messages: list) -> tuple[list, int]:
         if not isinstance(content, list):
             out.append(msg)
             continue
-
         new_content = []
         for block in content:
             if (isinstance(block, dict)
@@ -102,83 +107,155 @@ def _filter_messages(messages: list) -> tuple[list, int]:
                     and len(block["content"]) > 1500):
                 is_waste, label = _detect_waste(block["content"])
                 if is_waste:
-                    tok = _estimate_tokens(block["content"])
+                    tok = _tok(block["content"])
                     saved += tok
                     new_content.append({
                         **block,
                         "content": (
-                            f"[skim proxy: stripped {label} "
-                            f"({tok:,} tokens). File is in .llmignore. "
-                            f"Set SKIM_NO_FILTER=1 to disable.)"
+                            f"[skim: stripped {label} ({tok:,} tokens). "
+                            f"In .llmignore. Set SKIM_NO_FILTER=1 to disable.]"
                         ),
                     })
                     continue
             new_content.append(block)
         out.append({**msg, "content": new_content})
-
     return out, saved
 
 
-def _ctx_bar(used: int, limit: int, width: int = 22) -> str:
+# ── Prompt caching injection (Anthropic only) ─────────────────────────────────
+
+def _inject_caching(body: dict) -> dict:
+    """
+    Transparently inject cache_control into system prompts and large context
+    blocks. Uses Anthropic's prompt caching feature — first call incurs a
+    25% write fee, all subsequent calls with the same content are free.
+
+    Supports up to 4 cache breakpoints per request.
+    """
+    # 1. Cache the system prompt
+    system = body.get("system")
+    if isinstance(system, str) and len(system) > 100:
+        body = {**body, "system": [
+            {"type": "text", "text": system,
+             "cache_control": {"type": "ephemeral"}}
+        ]}
+    elif isinstance(system, list) and system:
+        # Already a list — ensure the last block has cache_control
+        last = system[-1]
+        if isinstance(last, dict) and not last.get("cache_control"):
+            body = {**body, "system": system[:-1] + [
+                {**last, "cache_control": {"type": "ephemeral"}}
+            ]}
+
+    # 2. Cache the two largest user messages (repeated context / file loads)
+    messages = list(body.get("messages", []))
+    candidates = [
+        (i, len(msg.get("content", "")) if isinstance(msg.get("content"), str) else 0)
+        for i, msg in enumerate(messages)
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str)
+    ]
+    for idx, _ in sorted(candidates, key=lambda x: -x[1])[:2]:
+        msg = messages[idx]
+        text = msg["content"]
+        if len(text) > 500:   # only bother caching substantial content
+            messages[idx] = {
+                **msg,
+                "content": [{
+                    "type": "text", "text": text,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+            }
+    if candidates:
+        body = {**body, "messages": messages}
+
+    return body
+
+
+# ── Console output ────────────────────────────────────────────────────────────
+
+def _fmt(n: int) -> str:
+    if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+    if n >= 1_000:     return f"{n/1_000:.1f}k"
+    return str(n)
+
+
+def _bar(used: int, limit: int, w: int = 22) -> str:
     pct   = min(used / max(limit, 1), 1.0)
-    fill  = int(pct * width)
-    bar   = "█" * fill + "░" * (width - fill)
+    fill  = int(pct * w)
+    bar   = "█" * fill + "░" * (w - fill)
     c     = "\033[92m" if pct < 0.5 else ("\033[93m" if pct < 0.8 else "\033[91m")
     return f"{c}{bar}\033[0m {pct*100:.1f}%"
 
 
-def _fmt_n(n: int) -> str:
-    if n >= 1_000_000:
-        return f"{n/1_000_000:.1f}M"
-    if n >= 1_000:
-        return f"{n/1_000:.1f}k"
-    return str(n)
+def _print_health(inp: int, out: int, saved: int, cached: int, ms: int,
+                  ctx_limit: int) -> None:
+    BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
+    RED  = "\033[91m"; CYAN  = "\033[96m"; NC = "\033[0m"
 
+    total = _session.total_input
+    pct   = total / max(ctx_limit, 1)
+    ts    = datetime.now().strftime("%H:%M:%S")
+
+    print(f"{BOLD}[skim]{NC} {ts}  call #{_session.calls}  {ms}ms")
+    print(f"  Context  {_bar(total, ctx_limit)}  {_fmt(total)}/{_fmt(ctx_limit)}")
+
+    extras = []
+    if saved  > 0: extras.append(f"{GREEN}stripped {_fmt(saved)} waste{NC}")
+    if cached > 0: extras.append(f"{CYAN}cached {_fmt(cached)} tokens{NC}")
+    line = f"  This call: {_fmt(inp)} in / {_fmt(out)} out"
+    if extras: line += "  " + "  ".join(extras)
+    print(line)
+
+    if pct > 0.85:
+        print(f"  {RED}⚠  {pct*100:.0f}% full — /compact NOW before quality degrades{NC}")
+    elif pct > 0.65:
+        print(f"  {YELLOW}→  {pct*100:.0f}% full — consider /compact soon{NC}")
+    print()
+
+
+# ── HTTP handler ──────────────────────────────────────────────────────────────
 
 class _ProxyHandler(BaseHTTPRequestHandler):
-    # set by serve()
-    project_path:  Path  = Path(".")
-    context_limit: int   = 200_000
-    model:         str   = "claude"
-    no_filter:     bool  = False
+    context_limit: int  = 200_000
+    model:         str  = "claude"
+    no_filter:     bool = False
+    no_cache:      bool = False
 
-    def log_message(self, *_):
-        pass  # suppress default Apache-style log
+    def log_message(self, *_): pass
 
-    def _read_body(self) -> dict:
+    def _body(self) -> dict:
         n = int(self.headers.get("Content-Length", 0))
         if n:
-            try:
-                return json.loads(self.rfile.read(n))
-            except Exception:
-                pass
+            try: return json.loads(self.rfile.read(n))
+            except Exception: pass
         return {}
 
     def _send(self, code: int, body: bytes, ct: str = "application/json") -> None:
         self.send_response(code)
-        self.send_header("Content-Type", ct)
+        self.send_header("Content-Type",   ct)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
-    def do_OPTIONS(self):
-        self._send(200, b"")
+    def do_OPTIONS(self): self._send(200, b"")
 
     def do_GET(self):
         if self.path.split("?")[0] == "/health":
             try:
                 from adapters import __version__
             except Exception:
-                __version__ = "unknown"
+                __version__ = "0.2.0"
             self._send(200, json.dumps({
-                "status": "ok", "version": __version__,
+                "status":  "ok",
+                "version": __version__,
                 "session": {
-                    "calls":        _session.calls,
-                    "input_tokens": _session.total_input,
+                    "calls":         _session.calls,
+                    "input_tokens":  _session.total_input,
                     "output_tokens": _session.total_output,
-                    "saved_tokens": _session.total_saved,
-                    "context_pct":  round(_session.total_input / max(self.context_limit, 1) * 100, 1),
+                    "saved_tokens":  _session.total_saved,
+                    "cached_tokens": _session.total_cached,
+                    "context_pct":   round(_session.total_input / max(self.context_limit, 1) * 100, 1),
                 },
             }).encode())
         else:
@@ -186,47 +263,100 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        body = self._read_body()
-
+        body = self._body()
         if path == "/v1/messages":
-            self._handle_anthropic(body)
+            self._anthropic(body)
         elif path == "/v1/chat/completions":
-            self._handle_openai(body)
+            self._openai(body)
         else:
             self._send(404, json.dumps({"error": f"unknown: {path}"}).encode())
 
-    # ── Anthropic ────────────────────────────────────────────────────────
-    def _handle_anthropic(self, body: dict) -> None:
-        api_key = (
-            self.headers.get("x-api-key")
-            or os.environ.get("ANTHROPIC_API_KEY", "")
-        )
+    # ── Anthropic ─────────────────────────────────────────────────────────────
+
+    def _anthropic(self, body: dict) -> None:
+        api_key = (self.headers.get("x-api-key") or
+                   os.environ.get("ANTHROPIC_API_KEY", ""))
         if not api_key:
-            self._send(401, b'{"error": "ANTHROPIC_API_KEY not set. Export it before starting skim proxy."}')
+            self._send(401, b'{"error": "ANTHROPIC_API_KEY not set"}')
             return
 
-        t0       = time.time()
-        messages = body.get("messages", [])
+        t0 = time.time()
 
-        # Filter unless disabled
+        # Filter waste
         no_filter = os.environ.get("SKIM_NO_FILTER") or self.no_filter
-        if no_filter:
-            filtered, saved = messages, 0
+        if not no_filter:
+            filtered_msgs, saved = _filter_messages(body.get("messages", []))
+            body = {**body, "messages": filtered_msgs}
         else:
-            filtered, saved = _filter_messages(messages)
+            saved = 0
 
-        fwd_body = {**body, "messages": filtered}
+        # Inject prompt caching
+        no_cache = os.environ.get("SKIM_NO_CACHE") or self.no_cache
+        if not no_cache:
+            body = _inject_caching(body)
 
-        status, resp = self._call_anthropic(fwd_body, api_key)
+        streaming = body.get("stream", False)
+        if streaming:
+            self._anthropic_stream(body, api_key, saved, t0)
+        else:
+            self._anthropic_sync(body, api_key, saved, t0)
+
+    def _anthropic_sync(self, body: dict, api_key: str, saved: int, t0: float) -> None:
+        status, resp = self._call_anthropic(body, api_key)
 
         usage  = resp.get("usage", {})
-        inp    = usage.get("input_tokens", _estimate_tokens(json.dumps(filtered)))
-        out    = usage.get("output_tokens", 0)
+        inp    = usage.get("input_tokens",         0)
+        out    = usage.get("output_tokens",         0)
+        cached = usage.get("cache_read_input_tokens", 0)
         ms     = int((time.time() - t0) * 1000)
 
-        _session.record(inp, out, saved)
-        self._print_health(inp, out, saved, ms)
+        _session.record(inp, out, saved, cached)
+        _print_health(inp, out, saved, cached, ms, self.context_limit)
         self._send(status, json.dumps(resp).encode())
+
+    def _anthropic_stream(self, body: dict, api_key: str, saved: int, t0: float) -> None:
+        url  = "https://api.anthropic.com/v1/messages"
+        data = json.dumps(body).encode()
+        req  = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type",      "application/json")
+        req.add_header("x-api-key",         api_key)
+        req.add_header("anthropic-version", "2023-06-01")
+
+        self.send_response(200)
+        self.send_header("Content-Type",  "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection",    "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        inp = out = cached = 0
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                for raw in resp:
+                    self.wfile.write(raw)
+                    self.wfile.flush()
+                    if raw.startswith(b"data: ") and raw.strip() != b"data: [DONE]":
+                        try:
+                            ev = json.loads(raw[6:])
+                            t  = ev.get("type", "")
+                            if t == "message_start":
+                                u = ev.get("message", {}).get("usage", {})
+                                inp    = u.get("input_tokens",              0)
+                                cached = u.get("cache_read_input_tokens",   0)
+                            elif t == "message_delta":
+                                out = ev.get("usage", {}).get("output_tokens", 0)
+                        except Exception:
+                            pass
+        except Exception as e:
+            err = f'data: {json.dumps({"type":"error","error":str(e)})}\n\n'
+            try:
+                self.wfile.write(err.encode()); self.wfile.flush()
+            except Exception:
+                pass
+
+        ms = int((time.time() - t0) * 1000)
+        _session.record(inp, out, saved, cached)
+        _print_health(inp, out, saved, cached, ms, self.context_limit)
 
     def _call_anthropic(self, body: dict, api_key: str) -> tuple[int, dict]:
         url  = "https://api.anthropic.com/v1/messages"
@@ -243,8 +373,9 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             return 500, {"error": str(e)}
 
-    # ── OpenAI ───────────────────────────────────────────────────────────
-    def _handle_openai(self, body: dict) -> None:
+    # ── OpenAI ────────────────────────────────────────────────────────────────
+
+    def _openai(self, body: dict) -> None:
         api_key = (
             (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
             or os.environ.get("OPENAI_API_KEY", "")
@@ -253,16 +384,60 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self._send(401, b'{"error": "OPENAI_API_KEY not set"}')
             return
 
-        t0     = time.time()
-        status, resp = self._call_openai(body, api_key)
-        usage  = resp.get("usage", {})
-        inp    = usage.get("prompt_tokens", 0)
-        out    = usage.get("completion_tokens", 0)
-        ms     = int((time.time() - t0) * 1000)
+        t0 = time.time()
+        streaming = body.get("stream", False)
 
-        _session.record(inp, out, 0)
-        self._print_health(inp, out, 0, ms)
-        self._send(status, json.dumps(resp).encode())
+        if streaming:
+            self._openai_stream(body, api_key, t0)
+        else:
+            status, resp = self._call_openai(body, api_key)
+            usage  = resp.get("usage", {})
+            inp    = usage.get("prompt_tokens",     0)
+            out    = usage.get("completion_tokens", 0)
+            ms     = int((time.time() - t0) * 1000)
+            _session.record(inp, out, 0, 0)
+            _print_health(inp, out, 0, 0, ms, self.context_limit)
+            self._send(status, json.dumps(resp).encode())
+
+    def _openai_stream(self, body: dict, api_key: str, t0: float) -> None:
+        url  = "https://api.openai.com/v1/chat/completions"
+        data = json.dumps(body).encode()
+        req  = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type",  "application/json")
+        req.add_header("Authorization", f"Bearer {api_key}")
+
+        self.send_response(200)
+        self.send_header("Content-Type",  "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection",    "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        inp = out = 0
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                for raw in resp:
+                    self.wfile.write(raw)
+                    self.wfile.flush()
+                    if raw.startswith(b"data: ") and raw.strip() != b"data: [DONE]":
+                        try:
+                            ev = json.loads(raw[6:])
+                            u  = ev.get("usage") or {}
+                            if u:
+                                inp = u.get("prompt_tokens",     inp)
+                                out = u.get("completion_tokens", out)
+                        except Exception:
+                            pass
+        except Exception as e:
+            err = f'data: {json.dumps({"error": str(e)})}\n\n'
+            try:
+                self.wfile.write(err.encode()); self.wfile.flush()
+            except Exception:
+                pass
+
+        ms = int((time.time() - t0) * 1000)
+        _session.record(inp, out, 0, 0)
+        _print_health(inp, out, 0, 0, ms, self.context_limit)
 
     def _call_openai(self, body: dict, api_key: str) -> tuple[int, dict]:
         url  = "https://api.openai.com/v1/chat/completions"
@@ -278,63 +453,44 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         except Exception as e:
             return 500, {"error": str(e)}
 
-    # ── Console output ───────────────────────────────────────────────────
-    def _print_health(self, inp: int, out: int, saved: int, ms: int) -> None:
-        BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
-        RED  = "\033[91m"; CYAN  = "\033[96m"; NC = "\033[0m"
 
-        total_ctx = _session.total_input
-        limit     = self.context_limit
-        pct       = total_ctx / max(limit, 1)
-        ts        = datetime.now().strftime("%H:%M:%S")
-
-        print(f"{BOLD}[skim]{NC} {ts}  call #{_session.calls}  {ms}ms")
-        print(f"  Context  {_ctx_bar(total_ctx, limit)}"
-              f"  {_fmt_n(total_ctx)}/{_fmt_n(limit)}")
-        print(f"  This call: {_fmt_n(inp)} in / {_fmt_n(out)} out", end="")
-        if saved > 0:
-            print(f"  {GREEN}stripped {_fmt_n(saved)} waste tokens{NC}", end="")
-        print()
-
-        if pct > 0.85:
-            print(f"  {RED}⚠  {pct*100:.0f}% full — run /compact NOW before quality degrades{NC}")
-        elif pct > 0.65:
-            print(f"  {YELLOW}→ {pct*100:.0f}% full — consider /compact to keep quality high{NC}")
-        print()
-
+# ── Server entry point ────────────────────────────────────────────────────────
 
 def serve(
-    port: int = 7474,
-    host: str = "127.0.0.1",
-    project_path: Path = None,
-    context_limit: int = 200_000,
-    model: str = "claude",
-    no_filter: bool = False,
+    port:          int  = 7474,
+    host:          str  = "127.0.0.1",
+    project_path:  Path = None,
+    context_limit: int  = 200_000,
+    model:         str  = "claude",
+    no_filter:     bool = False,
+    no_cache:      bool = False,
 ) -> None:
-    _ProxyHandler.project_path  = project_path or Path(".")
     _ProxyHandler.context_limit = context_limit
     _ProxyHandler.model         = model
     _ProxyHandler.no_filter     = no_filter
+    _ProxyHandler.no_cache      = no_cache
 
     server = HTTPServer((host, port), _ProxyHandler)
 
-    BOLD = "\033[1m"; CYAN = "\033[96m"; YELLOW = "\033[93m"; NC = "\033[0m"
+    BOLD = "\033[1m"; CYAN = "\033[96m"; YELLOW = "\033[93m"; GREEN = "\033[92m"; NC = "\033[0m"
 
-    print(f"\n{BOLD}  skim proxy{NC}  — runtime token interceptor")
-    print(f"  {'─'*56}")
+    print(f"\n{BOLD}  skim proxy{NC}  — runtime token interceptor + query optimizer")
+    print(f"  {'─'*58}")
     print(f"  Listening  : http://{host}:{port}")
     print(f"  Model      : {model}  ({context_limit:,} token limit)")
-    print(f"  Project    : {_ProxyHandler.project_path}")
+    print(f"  Project    : {project_path or Path('.').resolve()}")
+    print(f"  Filtering  : {'off (--no-filter)' if no_filter else 'on — strips waste from tool results'}")
+    print(f"  Caching    : {'off (--no-cache)'  if no_cache  else 'on — auto-injects prompt caching'}")
     print()
-    print(f"  {YELLOW}Activate for Claude Code / any Anthropic tool:{NC}")
+    print(f"  {YELLOW}Activate for Claude Code:{NC}")
     print(f"  {CYAN}  export ANTHROPIC_BASE_URL=http://{host}:{port}{NC}")
     print()
     print(f"  {YELLOW}Activate for OpenAI tools:{NC}")
     print(f"  {CYAN}  export OPENAI_BASE_URL=http://{host}:{port}{NC}")
     print()
-    print(f"  Health: http://{host}:{port}/health")
-    print(f"  Press Ctrl+C to stop.")
-    print(f"  {'─'*56}\n")
+    print(f"  Health : http://{host}:{port}/health")
+    print(f"  Ctrl+C : stop")
+    print(f"  {'─'*58}\n")
 
     try:
         server.serve_forever()
@@ -342,11 +498,12 @@ def serve(
         pass
 
     print(f"\n{BOLD}  Session summary{NC}")
-    print(f"  {'─'*40}")
+    print(f"  {'─'*44}")
     print(f"  API calls       : {_session.calls}")
-    print(f"  Tokens sent     : {_fmt_n(_session.total_input)}")
-    print(f"  Tokens received : {_fmt_n(_session.total_output)}")
-    print(f"  Waste stripped  : {_fmt_n(_session.total_saved)}")
+    print(f"  Tokens sent     : {_fmt(_session.total_input)}")
+    print(f"  Tokens received : {_fmt(_session.total_output)}")
+    print(f"  Waste stripped  : {_fmt(_session.total_saved)}")
+    print(f"  {GREEN}Cache hits      : {_fmt(_session.total_cached)}{NC}")
     print()
 
 
@@ -357,13 +514,15 @@ def main():
     p = argparse.ArgumentParser(description="Start the skim runtime token proxy")
     p.add_argument("--port",      "-p", type=int, default=7474)
     p.add_argument("--host",            default="127.0.0.1")
-    p.add_argument("--path",            default=".", help="Project root (for .llmignore rules)")
+    p.add_argument("--path",            default=".", help="Project root for .llmignore rules")
     p.add_argument("--model",     "-m", default="claude")
-    p.add_argument("--no-filter",       action="store_true",
-                   help="Disable waste filtering (passthrough only, still tracks usage)")
+    p.add_argument("--no-filter",       action="store_true")
+    p.add_argument("--no-cache",        action="store_true",
+                   help="Disable automatic prompt caching injection")
     args = p.parse_args()
     limit = CONTEXT_LIMITS.get(args.model, 200_000)
-    serve(args.port, args.host, Path(args.path).resolve(), limit, args.model, args.no_filter)
+    serve(args.port, args.host, Path(args.path).resolve(), limit,
+          args.model, args.no_filter, args.no_cache)
 
 
 if __name__ == "__main__":
