@@ -5,6 +5,154 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.0] — 2026-05-31
+
+### Added — Enterprise control plane
+
+- **Budget enforcement** — hard-block API calls when users/teams exceed token or cost limits.
+  Proxy calls `/api/v1/budget/check` before forwarding; returns 429 on breach; fails open
+  on timeout (200ms) so server downtime never blocks work. Checks user → team → global budget
+  in priority order.
+- **Webhook alerts** — `server/webhooks.py` fires background HTTP/Slack payloads on
+  `budget.warning` (at `alert_pct`) and `budget.exceeded`. Slack-compatible format also works
+  with Microsoft Teams connectors. Payloads are HMAC-signed when a secret is configured.
+- **User invite system** — admins generate single-use, 7-day invite links via
+  `POST /api/v1/admin/invites`. New users self-register at `/invite/<token>`.
+  New page: `server/static/invite.html`.
+- **API key scopes + expiry** — keys now carry `scope` (`ingest` | `read` | `admin`) and
+  optional `expires_at`. `get_user_for_key` enforces both. Only org admins can create
+  `admin`-scoped keys.
+- **RBAC: team_admin role** — new role between `user` and `admin`. `team_admin` sees their
+  own team's stats only; `require_team_admin` decorator enforces this.
+- **Audit log** — new `audit_log` table. Every sensitive action (login, key created/revoked,
+  budget created/deleted, user invited/created/deleted, webhook fired) is recorded immutably.
+  Queryable via `GET /api/v1/admin/audit` and `skim admin audit`.
+- **Data export** — `GET /api/v1/export/events.csv` (up to 10k rows, CSV download) and
+  `GET /api/v1/export/summary.json` (structured JSON for BI tools).
+- **`skim admin` CLI** — new command with subcommands: `users`, `budget`, `keys`, `webhooks`,
+  `export`, `audit`. Calls server REST API using `SKIM_SERVER_URL` + `SKIM_SERVER_TOKEN`.
+  New `skim-admin` entry point in `pyproject.toml`.
+- New server routes: `POST /api/v1/budget/check`, `GET/POST/DELETE /api/v1/admin/budgets`,
+  `GET/POST/DELETE /api/v1/admin/webhooks`, `GET/POST /api/v1/admin/invites`,
+  `POST /api/v1/auth/register`, `GET /invite/<token>`, `DELETE /api/v1/auth/keys/<prefix>`,
+  `GET /api/v1/export/events.csv`, `GET /api/v1/export/summary.json`,
+  `GET /api/v1/admin/audit`, `DELETE /api/v1/admin/users/<user_id>`.
+- New DB functions: `set_budget`, `check_budget`, `get_period_usage`, `list_budgets`,
+  `delete_budget`, `create_webhook`, `list_webhooks`, `delete_webhook`, `get_active_webhooks`,
+  `create_invite`, `get_invite`, `use_invite`, `list_invites`, `log_audit`, `get_audit_log`,
+  `revoke_api_key`, `delete_user`.
+- New DB tables: `webhooks`, `invites`, `audit_log`. Migrations: added `scope` + `expires_at`
+  to `api_keys`, `updated_at` to `budgets`.
+- New file: `server/webhooks.py` — background Slack/HTTP webhook delivery.
+
+### Changed
+
+- `server/db.py` — `connect()` now returns a new connection per call (was a shared connection
+  with `check_same_thread=False`). Flask routes use `get_db()` (Flask `g`-backed per-request
+  connection with teardown close). Eliminates concurrent-write corruption risk.
+- `stats_by_model()` — now includes `cached_tokens`, `cache_hit_pct`, `waste_pct`,
+  `avg_latency_ms` in addition to basic stats.
+- New `stats_by_hour()` function added to `server/db.py`.
+- `create_api_key()` — now accepts `scope` and `expires_days` parameters.
+- `get_user_for_key()` — enforces key expiry and scope. Returns `None` for expired or
+  insufficient-scope keys.
+- `stats_by_user_route` now uses `require_team_admin` (was `require_admin`) — team admins
+  can see their own team's data.
+- `ingest_event` route: fires webhooks when budget thresholds are crossed post-ingestion.
+- `skim server` startup: uses gunicorn automatically if installed (4 workers, sync class);
+  falls back to Flask dev server with a clear production warning printed to stderr.
+- `CONTRIBUTING.md` + `SECURITY.md` updated to reflect skim (was "Distill" in both).
+
+---
+
+## [0.4.0] — 2026-05-31
+
+### Added
+
+- **Self-contained proxy dashboard** — `skim proxy` now serves a full 5-page local dashboard
+  at `/dashboard` (no server, no auth, no config). Opens in browser automatically 1.5s after
+  start. Disable with `--no-browser`.
+- **Local event persistence** — all proxy events are written to `~/.skim/events.db` (SQLite)
+  regardless of whether `SKIM_SERVER_URL` is set. Powers the local dashboard.
+- **New file: `core/local_store.py`** — thread-safe SQLite writer with `init()`, `record()`,
+  `summary()`, `by_day()`, `by_hour()`, `by_model()`, `recent_events()` functions.
+- **New file: `core/static/local_dashboard.html`** — self-contained 5-page dashboard
+  (Overview, Sessions, Usage, Models, Savings) with Chart.js, dark theme, Inter font,
+  Lucide icons, SSE live updates, and number count-up animations.
+- **SSE live updates** — proxy broadcasts events to all open `/skim/stream` SSE connections.
+  Dashboard updates within 1 second of each API call. No polling.
+- **Local analytics API** — new proxy endpoints: `GET /skim/data/summary`, `/skim/data/daily`,
+  `/skim/data/hourly`, `/skim/data/models`, `/skim/data/events`. No auth required.
+- **Passthrough for unknown paths** — any Anthropic or OpenAI endpoint the proxy doesn't
+  handle explicitly (e.g. `/v1/models`, `/v1/count_tokens`) is now forwarded transparently.
+  Fixes Claude Code auth/session flow disruption.
+- **`--no-browser` flag** on `skim proxy` — disables automatic browser open.
+- **`_auth_type()` method** in proxy — centralises Anthropic plan detection:
+  `("apikey", key)` for API key users, `("oauth", bearer)` for Pro/OAuth users, `("", "")` if
+  no auth. Routing and feature decisions branch on this single return value.
+- **Pro/OAuth plan support** — `Authorization: Bearer <token>` is now accepted and forwarded
+  as-is. Prompt caching injection is skipped for OAuth users (Pro plan manages its own cache).
+- **`ThreadingHTTPServer`** with `allow_reuse_address = True` — proxy can handle concurrent
+  connections; port is released immediately on shutdown.
+- **`server.server_close()`** in `serve()` finally block — socket released cleanly on Ctrl+C.
+- **Server dashboard**: implemented Sessions, Usage, Models, Savings pages (were stubs saying
+  "coming in next release"). Added `/skim/stream` SSE endpoint and `stats_by_hour` route.
+- **Thread-safe SQLite for server** — `server/db.py` uses per-request connections via Flask `g`
+  with teardown close. Replaced shared `check_same_thread=False` connection.
+
+### Changed
+
+- Dashboard CSS: proxy-served dashboard uses Inter font, Lucide icons, accent card colours,
+  Chart.js gradient fills, animated number counters, custom scrollbar.
+- `server/static/dashboard.html` + `login.html`: same font/icon improvements.
+- `skim proxy` startup banner: now shows dashboard URL alongside proxy URL.
+- `distill_mcp/` directory deleted — was an exact duplicate of `skim_mcp/` with stale branding.
+- `requirements.txt` header corrected from "TokenWise" to "skim-llm".
+- `skim_mcp/server.py` scan tool output: "distill scan" → "skim scan".
+
+### Fixed
+
+- `config.py:load()` — `~/.skimrc` was preempting project `.skimrc` due to a misplaced
+  `break`. Project config is now loaded after user home config and takes priority.
+- `base_adapter.py:compact()` — summary was stored as `role="assistant"`, causing a 400 error
+  on the next Anthropic API call (first message must be `role="user"`). Now stored as a
+  `user`+`assistant` pair.
+- `fix.py` — dry-run temp write not wrapped in `try/finally`; an exception during the
+  after-scan would leave `.llmignore` permanently modified. Fixed with `try/finally`.
+- `hooks.py` — `chmod +x` was applied on new hook install but not on update. Git hooks
+  silently stopped executing after a second `skim hooks install`.
+- `claude_adapter.py:run_subagent()` — did not forward `api_key` to the sub-adapter.
+  If the parent was initialised with an explicit key, the subagent would fail.
+- `proxy.py` stream handlers — `body` variable (request dict) was overwritten by the error
+  response in `except urllib.error.HTTPError` blocks. `_report_bg` would then log the wrong
+  model from the error dict. Renamed to `err_body`.
+- `proxy.py` sync handlers — `json.loads(e.read())` in HTTPError handlers was unprotected;
+  non-JSON error responses (HTML error pages) would raise an unhandled `JSONDecodeError`.
+
+---
+
+## [0.3.0] — 2026-05-31
+
+### Added
+
+- `core/config.py` — `.skimrc` / `skim.json` config file support; load order: CLI flags →
+  project config → user home config → defaults; `skim config init` and `skim config show`
+- `core/hooks.py` — `skim hooks install/remove/status`; installs a git pre-commit hook that
+  runs `skim check` before every commit; safe update (checks for skim marker before removing)
+- `core/baseline.py` — `skim baseline save/compare/list/delete`; save token count snapshots
+  and diff against them in CI; fails if regression > 5k tokens
+- Enhanced `skim server` dashboard: team leaderboard, per-user waste %, cache hit rate, org
+  insights, LDAP + OIDC auth hooks
+- Streaming proxy: Anthropic and OpenAI streaming responses are forwarded chunk-by-chunk
+  without buffering; `cache_read_input_tokens` parsed from SSE stream for accurate tracking
+
+### Changed
+
+- `skim server` banner now shows admin email and env var instructions
+- `stats_by_user` returns `waste_pct` and `cache_hit_pct` derived fields
+
+---
+
 ## [0.2.0] — 2026-05-31
 
 ### Added

@@ -20,8 +20,10 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Run `python3 core/token_counter.py --path ./my-project`
-        2. ...
+        1. Run `skim proxy --port 7474`
+        2. Set `ANTHROPIC_BASE_URL=http://localhost:7474`
+        3. Make an API call
+        4. See error...
     validations:
       required: true
 
@@ -39,8 +41,9 @@ body:
       placeholder: |
         - OS: Ubuntu 24.04
         - Python: 3.12.3
-        - distill version / commit: abc1234
-        - Provider / adapter: ClaudeAdapter
+        - skim version: 0.5.0  (run: skim version)
+        - Component: proxy / server / adapter / CLI
+        - Auth type: API key / Claude Pro OAuth
     validations:
       required: true
 

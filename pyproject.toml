@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "skim-llm"
-version = "0.3.0"
+version = "0.5.0"
 description = "Runtime token proxy + optimization toolkit for LLM developers and enterprises. Intercepts API calls, strips waste in real-time, tracks costs, and serves a web dashboard."
 readme = "README.md"
 license = { file = "LICENSE" }

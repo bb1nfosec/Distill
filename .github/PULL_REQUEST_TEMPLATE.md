@@ -5,20 +5,23 @@
 ## Type of change
 
 - [ ] Bug fix
-- [ ] New feature / adapter
+- [ ] New feature
+- [ ] New LLM adapter
+- [ ] Enterprise / server
 - [ ] Refactor
 - [ ] Documentation
 - [ ] Tests
 
 ## Checklist
 
-- [ ] `python3 core/token_counter.py --path .` runs without errors
-- [ ] `python3 core/context_analyzer.py --path .` runs without errors
-- [ ] `python3 scripts/generate_config.py --output /tmp/test --model all --dry-run` works
-- [ ] New adapter (if any) includes a docstring with a usage example
-- [ ] Tests added or updated where applicable
-- [ ] Docs updated if behaviour changed
+- [ ] `python3 -m pytest tests/ -v` passes
+- [ ] `python3 -m py_compile core/*.py server/*.py adapters/*.py` clean
+- [ ] `python3 -m core.cli scan --path .` runs without errors
+- [ ] New adapter (if any) extends `BaseLLMAdapter` and has a docstring example
+- [ ] No new hard dependencies added to `core/` (must remain stdlib-only)
+- [ ] Docs updated if behaviour or API changed
+- [ ] CHANGELOG.md entry added
 
 ## Notes for reviewers
 
-<!-- Anything non-obvious about the implementation, tradeoffs made, etc. -->
+<!-- Anything non-obvious, trade-offs made, follow-up work needed -->
