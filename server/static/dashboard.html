@@ -209,6 +209,9 @@ tr:hover td { background: rgba(255,255,255,.02); }
       <a class="nav-item" id="nav-team" onclick="showPage('team')" style="display:none">
         <span class="nav-icon">👥</span> Team
       </a>
+      <a class="nav-item" id="nav-insights" onclick="showPage('insights')" style="display:none">
+        <span class="nav-icon">💡</span> Insights
+      </a>
       <a class="nav-item" onclick="showPage('settings')">
         <span class="nav-icon">⚙</span> Settings
       </a>
@@ -311,6 +314,38 @@ tr:hover td { background: rgba(255,255,255,.02); }
       </div>
     </div><!-- end page-overview -->
 
+    <!-- Team Leaderboard -->
+    <div class="content" id="page-team" style="display:none">
+      <div class="cards" id="team-summary-cards" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px"></div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Team Usage Leaderboard</div>
+          <span class="badge badge-blue" id="team-user-count">—</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>User</th><th>Team</th><th>Calls</th>
+              <th>Tokens In</th><th>Cost</th><th>Waste %</th><th>Cache Hit %</th><th>Avg Latency</th>
+            </tr>
+          </thead>
+          <tbody id="team-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Insights -->
+    <div class="content" id="page-insights" style="display:none">
+      <div style="margin-bottom:20px">
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px">Org Optimization Insights</div>
+        <div style="color:var(--muted);font-size:13px">AI-generated recommendations based on your team's usage patterns.</div>
+      </div>
+      <div id="insights-list"></div>
+      <div id="insights-empty" style="display:none;color:var(--muted);font-size:13px;padding:32px 0">
+        No insights yet — connect team proxies to start collecting data.
+      </div>
+    </div>
+
     <!-- Placeholder pages -->
     <div class="content" id="page-sessions" style="display:none">
       <p style="color:var(--muted)">Session view — coming in next release.</p>
@@ -323,9 +358,6 @@ tr:hover td { background: rgba(255,255,255,.02); }
     </div>
     <div class="content" id="page-savings" style="display:none">
       <p style="color:var(--muted)">Savings report — coming in next release.</p>
-    </div>
-    <div class="content" id="page-team" style="display:none">
-      <p style="color:var(--muted)">Team management — coming in next release.</p>
     </div>
     <div class="content" id="page-settings" style="display:none">
       <div class="chart-card" style="max-width:520px">
@@ -439,7 +471,8 @@ async function bootApp() {
   document.getElementById('app-shell').style.display    = 'flex';
   renderUser();
   if (_user && _user.role === 'admin') {
-    document.getElementById('nav-team').style.display = '';
+    document.getElementById('nav-team').style.display     = '';
+    document.getElementById('nav-insights').style.display = '';
   }
   await refresh();
 }
@@ -454,16 +487,19 @@ function renderUser() {
 }
 
 // ── Pages ─────────────────────────────────────────────────────────────────
-const PAGES = ['overview','sessions','usage','models','savings','team','settings'];
+const PAGES = ['overview','sessions','usage','models','savings','team','insights','settings'];
 function showPage(name) {
   PAGES.forEach(p => {
-    document.getElementById(`page-${p}`).style.display = p === name ? '' : 'none';
+    const el = document.getElementById(`page-${p}`);
+    if (el) el.style.display = p === name ? '' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('page-title').textContent =
     {overview:'Dashboard', sessions:'Sessions', usage:'Usage', models:'Models',
-     savings:'Savings', team:'Team', settings:'Settings'}[name] || name;
-  if (name === 'overview') refresh();
+     savings:'Savings', team:'Team', insights:'Insights', settings:'Settings'}[name] || name;
+  if (name === 'overview')  refresh();
+  if (name === 'team')      loadTeam();
+  if (name === 'insights')  loadInsights();
 }
 
 function changePeriod() {
@@ -609,6 +645,91 @@ function renderEvents(events) {
       <td><span class="badge badge-green">ok</span></td>
     </tr>`;
   }).join('');
+}
+
+// ── Team leaderboard ──────────────────────────────────────────────────────
+async function loadTeam() {
+  const [byUser, summary] = await Promise.all([
+    api(`/api/v1/stats/by-user?days=${_days}`),
+    api(`/api/v1/stats/summary?days=${_days}`),
+  ]);
+  if (!byUser) return;
+  const users = byUser.data || [];
+  document.getElementById('team-user-count').textContent = `${users.length} users`;
+
+  // Summary mini-cards
+  const totalCost  = users.reduce((s, u) => s + (u.cost_usd || 0), 0);
+  const totalCalls = users.reduce((s, u) => s + (u.calls    || 0), 0);
+  const avgWaste   = users.length ? (users.reduce((s,u) => s+(u.waste_pct||0),0)/users.length).toFixed(1) : 0;
+  document.getElementById('team-summary-cards').innerHTML = `
+    <div class="card"><div class="card-icon">👥</div>
+      <div class="card-label">Active Users</div>
+      <div class="card-value">${users.length}</div>
+      <div class="card-delta neutral">${totalCalls} total calls</div></div>
+    <div class="card"><div class="card-icon">💵</div>
+      <div class="card-label">Team Cost</div>
+      <div class="card-value">${fmtCost(totalCost)}</div>
+      <div class="card-delta neutral">last ${_days} days</div></div>
+    <div class="card"><div class="card-icon">✂️</div>
+      <div class="card-label">Avg Waste %</div>
+      <div class="card-value">${avgWaste}%</div>
+      <div class="card-delta ${avgWaste < 30 ? 'down' : 'up'}">${avgWaste < 30 ? 'good' : 'needs .llmignore fix'}</div></div>
+  `;
+
+  const tbody = document.getElementById('team-table');
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:32px">No team data yet. Connect proxies with SKIM_SERVER_URL + SKIM_SERVER_TOKEN.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map((u, i) => {
+    const wasteCls  = u.waste_pct  > 50 ? 'badge-red' : u.waste_pct  > 20 ? 'badge-warn' : 'badge-green';
+    const cacheCls  = u.cache_hit_pct < 20 ? 'badge-red' : u.cache_hit_pct < 50 ? 'badge-warn' : 'badge-green';
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td><strong>${u.user_name||'anon'}</strong>${u.email ? `<div style="color:var(--muted);font-size:11px">${u.email}</div>` : ''}</td>
+      <td>${u.team ? `<span class="badge badge-blue">${u.team}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${u.calls}</td>
+      <td>${fmtN(u.input_tokens)}</td>
+      <td>${fmtCost(u.cost_usd)}</td>
+      <td><span class="badge ${wasteCls}">${u.waste_pct}%</span></td>
+      <td><span class="badge ${cacheCls}">${u.cache_hit_pct}%</span></td>
+      <td style="color:var(--muted)">${u.avg_latency_ms ? u.avg_latency_ms+'ms' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Insights ──────────────────────────────────────────────────────────────
+const SEV_COLOR = { high: 'var(--danger)', medium: 'var(--warn)', low: 'var(--accent)' };
+const SEV_BADGE = { high: 'badge-red',     medium: 'badge-warn',  low: 'badge-blue'   };
+
+async function loadInsights() {
+  const data = await api(`/api/v1/insights?days=${_days}`);
+  const list  = document.getElementById('insights-list');
+  const empty = document.getElementById('insights-empty');
+  if (!data || !data.insights) return;
+  const items = data.insights;
+  if (!items.length) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = items.map(ins => `
+    <div class="chart-card" style="margin-bottom:16px;border-left:3px solid ${SEV_COLOR[ins.severity]||'var(--accent)'}">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span class="badge ${SEV_BADGE[ins.severity]||'badge-blue'}">${ins.severity.toUpperCase()}</span>
+            <strong style="font-size:14px">${ins.title}</strong>
+          </div>
+          <div style="color:var(--muted);font-size:13px;margin-bottom:12px;line-height:1.7">${ins.detail}</div>
+          ${ins.action ? `<div style="background:var(--bg);padding:8px 12px;border-radius:6px;border:1px solid var(--border)">
+            <code style="font-size:12px;color:var(--accent2)">${ins.action}</code>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────

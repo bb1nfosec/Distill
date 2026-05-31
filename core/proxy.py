@@ -30,13 +30,20 @@ import json
 import os
 import sys
 import time
+import warnings
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 
 import urllib.request
 import urllib.error
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"google\.api_core\._python_version_support",
+)
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -68,7 +75,31 @@ class _SessionState:
             self.total_cached += cached
 
 
-_session = _SessionState()
+_session    = _SessionState()
+_print_lock = Lock()
+_ticker_on  = True
+
+
+# ── Server reporting (fire-and-forget) ────────────────────────────────────────
+
+def _report_to_server(event: dict) -> None:
+    url   = os.environ.get("SKIM_SERVER_URL", "").rstrip("/")
+    token = os.environ.get("SKIM_SERVER_TOKEN", "")
+    if not url or not token:
+        return
+    try:
+        data = json.dumps(event).encode()
+        req  = urllib.request.Request(f"{url}/api/v1/events", data=data, method="POST")
+        req.add_header("Content-Type",  "application/json")
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+    except Exception:
+        pass
+
+
+def _report_bg(event: dict) -> None:
+    Thread(target=_report_to_server, args=(event,), daemon=True).start()
 
 
 # ── Token estimation ──────────────────────────────────────────────────────────
@@ -173,44 +204,98 @@ def _inject_caching(body: dict) -> dict:
 
 # ── Console output ────────────────────────────────────────────────────────────
 
+BOLD   = "\033[1m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+RED    = "\033[91m"
+CYAN   = "\033[96m"
+DIM    = "\033[2m"
+NC     = "\033[0m"
+ERASE  = "\033[2K\r"   # erase current line, return to start
+
+
 def _fmt(n: int) -> str:
     if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
     if n >= 1_000:     return f"{n/1_000:.1f}k"
     return str(n)
 
 
-def _bar(used: int, limit: int, w: int = 22) -> str:
-    pct   = min(used / max(limit, 1), 1.0)
-    fill  = int(pct * w)
-    bar   = "█" * fill + "░" * (w - fill)
-    c     = "\033[92m" if pct < 0.5 else ("\033[93m" if pct < 0.8 else "\033[91m")
-    return f"{c}{bar}\033[0m {pct*100:.1f}%"
+def _bar(used: int, limit: int, w: int = 20) -> str:
+    pct  = min(used / max(limit, 1), 1.0)
+    fill = int(pct * w)
+    bar  = "█" * fill + "░" * (w - fill)
+    c    = GREEN if pct < 0.5 else (YELLOW if pct < 0.8 else RED)
+    return f"{c}{bar}{NC} {pct*100:.1f}%"
+
+
+def _cost(inp: int, out: int) -> str:
+    # claude-sonnet-4 rates (input $3/M, output $15/M)
+    usd = (inp * 3 + out * 15) / 1_000_000
+    return f"${usd:.4f}"
+
+
+def _live_ticker(ctx_limit: int) -> None:
+    """Daemon thread: redraws a single-line live status every 0.5s."""
+    frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    i = 0
+    while _ticker_on:
+        ts    = datetime.now().strftime("%H:%M:%S")
+        calls = _session.calls
+        saved = _session.total_saved
+        cache = _session.total_cached
+        inp   = _session.total_input
+        out   = _session.total_output
+        pct   = inp / max(ctx_limit, 1) * 100
+
+        if calls == 0:
+            status = f"{DIM}waiting for calls...{NC}"
+        else:
+            ctx_col = GREEN if pct < 50 else (YELLOW if pct < 80 else RED)
+            status = (
+                f"calls {BOLD}{calls}{NC}  "
+                f"ctx {ctx_col}{pct:.1f}%{NC}  "
+                f"saved {GREEN}{_fmt(saved)}{NC}  "
+                f"cached {CYAN}{_fmt(cache)}{NC}  "
+                f"cost {YELLOW}{_cost(inp, out)}{NC}"
+            )
+
+        spin = f"{CYAN}{frames[i % len(frames)]}{NC}"
+        line = f"  {spin} {BOLD}LIVE{NC}  {ts}  {status}"
+
+        with _print_lock:
+            sys.stdout.write(f"{ERASE}{line}")
+            sys.stdout.flush()
+
+        i += 1
+        time.sleep(0.5)
+
+    sys.stdout.write(ERASE)
+    sys.stdout.flush()
 
 
 def _print_health(inp: int, out: int, saved: int, cached: int, ms: int,
                   ctx_limit: int) -> None:
-    BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
-    RED  = "\033[91m"; CYAN  = "\033[96m"; NC = "\033[0m"
-
     total = _session.total_input
     pct   = total / max(ctx_limit, 1)
     ts    = datetime.now().strftime("%H:%M:%S")
 
-    print(f"{BOLD}[skim]{NC} {ts}  call #{_session.calls}  {ms}ms")
-    print(f"  Context  {_bar(total, ctx_limit)}  {_fmt(total)}/{_fmt(ctx_limit)}")
-
     extras = []
-    if saved  > 0: extras.append(f"{GREEN}stripped {_fmt(saved)} waste{NC}")
-    if cached > 0: extras.append(f"{CYAN}cached {_fmt(cached)} tokens{NC}")
-    line = f"  This call: {_fmt(inp)} in / {_fmt(out)} out"
-    if extras: line += "  " + "  ".join(extras)
-    print(line)
+    if saved  > 0: extras.append(f"{GREEN}▼ stripped {_fmt(saved)}{NC}")
+    if cached > 0: extras.append(f"{CYAN}◈ cached {_fmt(cached)}{NC}")
 
-    if pct > 0.85:
-        print(f"  {RED}⚠  {pct*100:.0f}% full — /compact NOW before quality degrades{NC}")
-    elif pct > 0.65:
-        print(f"  {YELLOW}→  {pct*100:.0f}% full — consider /compact soon{NC}")
-    print()
+    with _print_lock:
+        sys.stdout.write(ERASE)
+        print(f"{BOLD}[skim]{NC} {ts}  call #{_session.calls}  {DIM}{ms}ms{NC}")
+        print(f"  ctx  {_bar(total, ctx_limit)}  {DIM}{_fmt(total)}/{_fmt(ctx_limit)}{NC}")
+        call_line = f"  in {_fmt(inp)}  out {_fmt(out)}  cost {_cost(inp, out)}"
+        if extras:
+            call_line += "   " + "  ".join(extras)
+        print(call_line)
+        if pct > 0.85:
+            print(f"  {RED}{BOLD}⚠  {pct*100:.0f}% full — /compact NOW{NC}")
+        elif pct > 0.65:
+            print(f"  {YELLOW}→  {pct*100:.0f}% full — consider /compact soon{NC}")
+        print()
 
 
 # ── HTTP handler ──────────────────────────────────────────────────────────────
@@ -312,6 +397,13 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
         _session.record(inp, out, saved, cached)
         _print_health(inp, out, saved, cached, ms, self.context_limit)
+        _report_bg({
+            "provider": "anthropic", "model": body.get("model", "claude"),
+            "input_tokens": inp, "output_tokens": out,
+            "saved_tokens": saved, "cached_tokens": cached,
+            "cost_usd": (inp * 3 + out * 15) / 1_000_000,
+            "latency_ms": ms, "session_id": id(_session),
+        })
         self._send(status, json.dumps(resp).encode())
 
     def _anthropic_stream(self, body: dict, api_key: str, saved: int, t0: float) -> None:
@@ -357,6 +449,13 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         ms = int((time.time() - t0) * 1000)
         _session.record(inp, out, saved, cached)
         _print_health(inp, out, saved, cached, ms, self.context_limit)
+        _report_bg({
+            "provider": "anthropic", "model": body.get("model", "claude"),
+            "input_tokens": inp, "output_tokens": out,
+            "saved_tokens": saved, "cached_tokens": cached,
+            "cost_usd": (inp * 3 + out * 15) / 1_000_000,
+            "latency_ms": ms, "session_id": id(_session),
+        })
 
     def _call_anthropic(self, body: dict, api_key: str) -> tuple[int, dict]:
         url  = "https://api.anthropic.com/v1/messages"
@@ -397,6 +496,12 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             ms     = int((time.time() - t0) * 1000)
             _session.record(inp, out, 0, 0)
             _print_health(inp, out, 0, 0, ms, self.context_limit)
+            _report_bg({
+                "provider": "openai", "model": body.get("model", "gpt-4o"),
+                "input_tokens": inp, "output_tokens": out,
+                "cost_usd": (inp * 2.5 + out * 10) / 1_000_000,
+                "latency_ms": ms, "session_id": id(_session),
+            })
             self._send(status, json.dumps(resp).encode())
 
     def _openai_stream(self, body: dict, api_key: str, t0: float) -> None:
@@ -438,6 +543,12 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         ms = int((time.time() - t0) * 1000)
         _session.record(inp, out, 0, 0)
         _print_health(inp, out, 0, 0, ms, self.context_limit)
+        _report_bg({
+            "provider": "openai", "model": body.get("model", "gpt-4o"),
+            "input_tokens": inp, "output_tokens": out,
+            "cost_usd": (inp * 2.5 + out * 10) / 1_000_000,
+            "latency_ms": ms, "session_id": id(_session),
+        })
 
     def _call_openai(self, body: dict, api_key: str) -> tuple[int, dict]:
         url  = "https://api.openai.com/v1/chat/completions"
@@ -465,6 +576,8 @@ def serve(
     no_filter:     bool = False,
     no_cache:      bool = False,
 ) -> None:
+    global _ticker_on
+
     _ProxyHandler.context_limit = context_limit
     _ProxyHandler.model         = model
     _ProxyHandler.no_filter     = no_filter
@@ -472,38 +585,68 @@ def serve(
 
     server = HTTPServer((host, port), _ProxyHandler)
 
-    BOLD = "\033[1m"; CYAN = "\033[96m"; YELLOW = "\033[93m"; GREEN = "\033[92m"; NC = "\033[0m"
+    W = 62
+    proj     = str(project_path or Path(".").resolve())[:42]
+    hp       = f"http://{host}:{port}"
+    filt_c   = f"{RED}off{NC} (--no-filter)"   if no_filter else f"{GREEN}on{NC} — strips waste from tool results"
+    cache_c  = f"{RED}off{NC} (--no-cache)"    if no_cache  else f"{GREEN}on{NC} — auto-injects prompt caching"
+    filt_l   = "off (--no-filter)"             if no_filter else "on — strips waste from tool results"
+    cache_l  = "off (--no-cache)"              if no_cache  else "on — auto-injects prompt caching"
+    model_l  = f"{model}  ({context_limit:,} token limit)"
 
-    print(f"\n{BOLD}  skim proxy{NC}  — runtime token interceptor + query optimizer")
-    print(f"  {'─'*58}")
-    print(f"  Listening  : http://{host}:{port}")
-    print(f"  Model      : {model}  ({context_limit:,} token limit)")
-    print(f"  Project    : {project_path or Path('.').resolve()}")
-    print(f"  Filtering  : {'off (--no-filter)' if no_filter else 'on — strips waste from tool results'}")
-    print(f"  Caching    : {'off (--no-cache)'  if no_cache  else 'on — auto-injects prompt caching'}")
-    print()
-    print(f"  {YELLOW}Activate for Claude Code:{NC}")
-    print(f"  {CYAN}  export ANTHROPIC_BASE_URL=http://{host}:{port}{NC}")
-    print()
-    print(f"  {YELLOW}Activate for OpenAI tools:{NC}")
-    print(f"  {CYAN}  export OPENAI_BASE_URL=http://{host}:{port}{NC}")
-    print()
-    print(f"  Health : http://{host}:{port}/health")
-    print(f"  Ctrl+C : stop")
-    print(f"  {'─'*58}\n")
+    def line(label: str, plain: str, colored: str) -> None:
+        pad = W - 2 - len(label) - 2 - len(plain)
+        print(f"  {BOLD}│{NC}  {DIM}{label}{NC}  {colored}{' '*max(pad,0)}{BOLD}│{NC}")
+
+    def cmd_line(plain: str, colored: str) -> None:
+        pad = W - 4 - len(plain)
+        print(f"  {BOLD}│{NC}    {colored}{' '*max(pad,0)}{BOLD}│{NC}")
+
+    try:
+        from adapters import __version__ as _ver
+    except Exception:
+        _ver = "0.3.0"
+
+    print(f"\n  {BOLD}┌{'─'*W}┐{NC}")
+    print(f"  {BOLD}│{NC}  {CYAN}{BOLD}skim{NC} {DIM}v{_ver}{NC}  — runtime token proxy{' '*(W-32-len(_ver))}{BOLD}│{NC}")
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    line("listening", hp,       f"{CYAN}{hp}{NC}")
+    line("model    ", model_l,  f"{model}  {DIM}({context_limit:,} token limit){NC}")
+    line("project  ", proj,     f"{DIM}{proj}{NC}")
+    line("filtering", filt_l,   filt_c)
+    line("caching  ", cache_l,  cache_c)
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    print(f"  {BOLD}│{NC}  {YELLOW}Claude Code / Cursor:{NC}{' '*(W-21)}{BOLD}│{NC}")
+    cmd_line(f"export ANTHROPIC_BASE_URL={hp}", f"{CYAN}export ANTHROPIC_BASE_URL={hp}{NC}")
+    print(f"  {BOLD}│{NC}{' '*(W+2)}{BOLD}│{NC}")
+    print(f"  {BOLD}│{NC}  {YELLOW}OpenAI-compatible tools:{NC}{' '*(W-25)}{BOLD}│{NC}")
+    cmd_line(f"export OPENAI_BASE_URL={hp}", f"{CYAN}export OPENAI_BASE_URL={hp}{NC}")
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    footer = f"health  {hp}/health   Ctrl+C to stop"
+    print(f"  {BOLD}│{NC}  {DIM}{footer}{NC}{' '*(W-2-len(footer))}{BOLD}│{NC}")
+    print(f"  {BOLD}└{'─'*W}┘{NC}\n")
+
+    _ticker_on = True
+    ticker = Thread(target=_live_ticker, args=(context_limit,), daemon=True)
+    ticker.start()
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        _ticker_on = False
+        ticker.join(timeout=1)
 
-    print(f"\n{BOLD}  Session summary{NC}")
-    print(f"  {'─'*44}")
-    print(f"  API calls       : {_session.calls}")
-    print(f"  Tokens sent     : {_fmt(_session.total_input)}")
-    print(f"  Tokens received : {_fmt(_session.total_output)}")
-    print(f"  Waste stripped  : {_fmt(_session.total_saved)}")
-    print(f"  {GREEN}Cache hits      : {_fmt(_session.total_cached)}{NC}")
+    usd_total = (_session.total_input * 3 + _session.total_output * 15) / 1_000_000
+    saved_usd = _session.total_saved * 3 / 1_000_000
+
+    print(f"\n  {BOLD}Session summary{NC}  {DIM}───────────────────────────────{NC}")
+    print(f"  API calls       {BOLD}{_session.calls}{NC}")
+    print(f"  Tokens in/out   {_fmt(_session.total_input)} / {_fmt(_session.total_output)}")
+    print(f"  Est. cost       {YELLOW}{_cost(_session.total_input, _session.total_output)}{NC}")
+    print(f"  Waste stripped  {GREEN}{_fmt(_session.total_saved)} tokens  (saved ~${saved_usd:.4f}){NC}")
+    print(f"  Cache hits      {CYAN}{_fmt(_session.total_cached)} tokens{NC}")
     print()
 
 

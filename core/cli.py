@@ -19,8 +19,15 @@ Usage:
 """
 
 import sys
+import warnings
 import argparse
 from pathlib import Path
+
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    module=r"google\.api_core\._python_version_support",
+)
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))

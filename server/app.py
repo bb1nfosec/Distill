@@ -36,6 +36,7 @@ from server.db import (
     connect, init_schema, create_user, get_user_by_email, get_user_by_id,
     create_api_key, get_user_for_key, insert_event,
     stats_summary, stats_by_day, stats_by_user, stats_by_model, query_events,
+    get_insights,
 )
 from server.auth import (
     issue_jwt, verify_jwt, hash_password, verify_password,
@@ -198,6 +199,14 @@ def create_app(db_path: Path = None) -> "Flask":
         days = int(request.args.get("days", 30))
         return jsonify({"data": stats_by_model(db, days)})
 
+    @app.route("/api/v1/insights")
+    @require_auth
+    def insights_route():
+        if request.user["role"] != "admin":
+            return jsonify({"error": "Admin only"}), 403
+        days = int(request.args.get("days", 30))
+        return jsonify({"insights": get_insights(db, days), "days": days})
+
     # ── Events ingestion (from proxy) ─────────────────────────────────────
 
     @app.route("/api/v1/events", methods=["POST"])
@@ -280,15 +289,34 @@ def main():
     db_path = Path(args.db).resolve() if args.db else None
     app     = create_app(db_path)
 
-    print(f"\n  skim server")
-    print(f"  {'─'*48}")
-    print(f"  Dashboard  : http://{args.host}:{args.port}/dashboard")
-    print(f"  API        : http://{args.host}:{args.port}/api/v1/health")
-    print(f"  Admin user : {os.environ.get('SKIM_ADMIN_EMAIL','(set SKIM_ADMIN_EMAIL)')}")
-    print(f"\n  Ship events from proxy:")
-    print(f"    export SKIM_SERVER_URL=http://{args.host}:{args.port}")
-    print(f"    export SKIM_SERVER_TOKEN=<your-api-key>")
-    print(f"  {'─'*48}\n")
+    BOLD="\033[1m"; CYAN="\033[96m"; YELLOW="\033[93m"; GREEN="\033[92m"
+    DIM="\033[2m"; NC="\033[0m"
+    W   = 62
+    hp  = f"http://{args.host}:{args.port}"
+    adm = os.environ.get("SKIM_ADMIN_EMAIL", "(set SKIM_ADMIN_EMAIL to auto-create admin)")
+
+    def row(label, plain, colored):
+        pad = W - 2 - len(label) - 2 - len(plain)
+        print(f"  {BOLD}│{NC}  {DIM}{label}{NC}  {colored}{' '*max(pad,0)}{BOLD}│{NC}")
+
+    def cmd(plain, colored):
+        pad = W - 4 - len(plain)
+        print(f"  {BOLD}│{NC}    {colored}{' '*max(pad,0)}{BOLD}│{NC}")
+
+    print(f"\n  {BOLD}┌{'─'*W}┐{NC}")
+    print(f"  {BOLD}│{NC}  {CYAN}{BOLD}skim server{NC} {DIM}v0.3.0{NC}  — org token intelligence{' '*(W-41)}{BOLD}│{NC}")
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    row("dashboard", f"{hp}/dashboard",        f"{CYAN}{hp}/dashboard{NC}")
+    row("api      ", f"{hp}/api/v1/health",    f"{DIM}{hp}/api/v1/health{NC}")
+    row("admin    ", adm,                      f"{YELLOW}{adm}{NC}")
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    print(f"  {BOLD}│{NC}  {YELLOW}Connect proxy to this server:{NC}{' '*(W-29)}{BOLD}│{NC}")
+    cmd(f"export SKIM_SERVER_URL={hp}",      f"{CYAN}export SKIM_SERVER_URL={hp}{NC}")
+    cmd( "export SKIM_SERVER_TOKEN=<key>",  f"{CYAN}export SKIM_SERVER_TOKEN={DIM}<generate in Settings>{NC}")
+    print(f"  {BOLD}├{'─'*W}┤{NC}")
+    footer = "Ctrl+C to stop"
+    print(f"  {BOLD}│{NC}  {DIM}{footer}{NC}{' '*(W-2-len(footer))}{BOLD}│{NC}")
+    print(f"  {BOLD}└{'─'*W}┘{NC}\n")
 
     app.run(host=args.host, port=args.port, debug=False)
 

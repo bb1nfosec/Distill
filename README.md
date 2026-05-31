@@ -5,11 +5,12 @@
 **The runtime layer between your AI tools and the LLM API.**
 
 [![PyPI](https://img.shields.io/pypi/v/skim-llm?color=2563eb&logo=pypi&logoColor=white)](https://pypi.org/project/skim-llm/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/skim-llm?color=2563eb)](https://pypi.org/project/skim-llm/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-2563eb?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-059669)](LICENSE)
 [![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-d97706)](pyproject.toml)
 
-[Quickstart](#quickstart) · [Proxy](#proxy--the-core) · [Dashboard](#dashboard) · [CLI](#cli-reference) · [Enterprise](#enterprise) · [Demo](https://demo-mu-ten-60.vercel.app)
+[Quickstart](#quickstart) · [Proxy](#proxy--the-core) · [Dashboard](#dashboard) · [CLI](#cli-reference) · [Enterprise](#enterprise) · [Live Demo](https://demo-mu-ten-60.vercel.app)
 
 </div>
 
@@ -166,7 +167,7 @@ skim check --path . --max-pct 30 --fail-on-waste
 
 **Example output — `skim fix`:**
 ```
-  distill fix  —  ./my-project
+  skim fix  —  ./my-project
   ──────────────────────────────────────────────────────
   Before  : 166.8k tokens  (83.4% ctx)  $0.50/session
 
@@ -218,7 +219,7 @@ skim hooks install --max-pct 30 --fail-on-waste
 | Budget enforcement | `skim check` in CI + git hooks + proxy hard limits |
 | SSO / LDAP | `SKIM_OIDC_*` + `SKIM_LDAP_*` env vars |
 | Audit trail | `~/.skim/audit.log` + central server ingestion |
-| Self-hosted deployment | Docker image + Helm chart (see `deploy/`) |
+| Self-hosted deployment | Docker image — see [Dockerfile](Dockerfile) |
 | Secrets governance | `skim secrets --fail` in pre-commit + CI |
 | Regression prevention | `skim baseline compare` in PR pipelines |
 | Air-gapped / Ollama | `--model ollama` — all analysis local, $0.00 |
@@ -262,7 +263,7 @@ Available tools: `scan_tokens`, `analyze_context`, `check_budget`, `fix_context`
 from adapters import ClaudeAdapter
 
 claude = ClaudeAdapter(
-    model="claude-sonnet-4-5",
+    model="claude-sonnet-4-6",
     system_prompt="You are a terse coding assistant.",
     enable_caching=True,   # enables prompt caching automatically
 )
@@ -307,6 +308,6 @@ Live demo (individual + org/enterprise): **https://demo-mu-ten-60.vercel.app**
 
 <div align="center">
 
-MIT License · [GitHub](https://github.com/bb1nfosec/skim) · [Issues](https://github.com/bb1nfosec/skim/issues) · [Changelog](CHANGELOG.md)
+MIT License · [GitHub](https://github.com/bb1nfosec/skim) · [PyPI](https://pypi.org/project/skim-llm/) · [Issues](https://github.com/bb1nfosec/skim/issues) · [Changelog](CHANGELOG.md)
 
 </div>
