@@ -7,6 +7,7 @@ All timestamps are UTC ISO strings.
 
 import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,12 +20,19 @@ def _ts() -> str:
 
 
 def connect(db_path: Path = None) -> sqlite3.Connection:
+    """
+    Return a new SQLite connection for the caller.
+    WAL mode allows concurrent reads and serialises writes safely —
+    each Flask request thread gets its own connection, no shared-state bugs.
+    Callers are responsible for closing when done (Flask teardown handles this).
+    """
     p = db_path or _DEFAULT_DB
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p), check_same_thread=False)
+    conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -342,13 +350,36 @@ def get_insights(conn, days: int = 30) -> list[dict]:
 def stats_by_model(conn, days: int = 30) -> list[dict]:
     sql = """
     SELECT
-        COALESCE(model, 'unknown') AS model,
-        COUNT(*)                   AS calls,
-        SUM(input_tokens)          AS input_tokens,
-        ROUND(SUM(cost_usd), 4)    AS cost_usd
+        COALESCE(model, 'unknown')       AS model,
+        COUNT(*)                         AS calls,
+        COALESCE(SUM(input_tokens),  0)  AS input_tokens,
+        COALESCE(SUM(output_tokens), 0)  AS output_tokens,
+        COALESCE(SUM(saved_tokens),  0)  AS saved_tokens,
+        COALESCE(SUM(cached_tokens), 0)  AS cached_tokens,
+        ROUND(COALESCE(SUM(cost_usd),    0), 4)  AS cost_usd,
+        ROUND(COALESCE(AVG(latency_ms),  0), 0)  AS avg_latency_ms
     FROM events
     WHERE datetime(ts) >= datetime('now', ?, 'utc')
     GROUP BY model
     ORDER BY input_tokens DESC
+    """
+    rows = [dict(r) for r in conn.execute(sql, [f"-{days} days"]).fetchall()]
+    for r in rows:
+        inp = r["input_tokens"] or 1
+        r["cache_hit_pct"] = round((r["cached_tokens"] or 0) / inp * 100, 1)
+        r["waste_pct"]     = round((r["saved_tokens"]  or 0) / inp * 100, 1)
+    return rows
+
+
+def stats_by_hour(conn, days: int = 7) -> list[dict]:
+    sql = """
+    SELECT
+        substr(ts,1,13)         AS hour,
+        COUNT(*)                AS calls,
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        ROUND(SUM(cost_usd), 6) AS cost_usd
+    FROM events
+    WHERE datetime(ts) >= datetime('now', ?, 'utc')
+    GROUP BY hour ORDER BY hour
     """
     return [dict(r) for r in conn.execute(sql, [f"-{days} days"]).fetchall()]

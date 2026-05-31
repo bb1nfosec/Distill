@@ -156,8 +156,13 @@ class BaseLLMAdapter(ABC):
         summary_msg = [{"role": "user", "content": summary_prompt}]
         result = self._call_api(summary_msg)
         
-        summary = f"[Compacted history]\n{result.content}"
-        self._history = [Message(role="assistant", content=summary)] + preserve
+        # Store as a user+assistant pair so the next API call starts with role=user.
+        # Anthropic (and OpenAI) require the first message to be role=user.
+        summary = f"[Compacted history — earlier conversation summary]\n{result.content}"
+        self._history = [
+            Message(role="user",      content=summary),
+            Message(role="assistant", content="Understood. Continuing from the summary above."),
+        ] + preserve
         
         tokens_before = self.count_tokens(history_text)
         tokens_after = self.count_tokens(summary)

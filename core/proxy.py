@@ -12,9 +12,11 @@ Anthropic / OpenAI API. On every request it:
   3. Tracks actual token usage from API responses (not estimates).
   4. Passes through streaming SSE responses without buffering.
   5. Shows live session health in the console.
+  6. Serves a local no-auth dashboard at /dashboard with real-time SSE updates.
+  7. Persists every event to ~/.skim/events.db for the local dashboard.
 
 Usage:
-    skim proxy [--port 7474] [--path .] [--model claude]
+    skim proxy [--port 7474] [--path .] [--model claude] [--no-browser]
 
 Then:
     export ANTHROPIC_BASE_URL=http://localhost:7474
@@ -22,19 +24,24 @@ Then:
 
 Endpoints:
     GET  /health                → session stats JSON
+    GET  /dashboard             → local no-auth dashboard (auto-opens in browser)
+    GET  /skim/stream           → SSE stream of live events
+    GET  /skim/data/*           → local analytics API (summary, daily, models, events)
     POST /v1/messages           → Anthropic Messages API
     POST /v1/chat/completions   → OpenAI Chat API
 """
 
 import json
 import os
+import queue
 import sys
 import time
 import warnings
+import webbrowser
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
-from threading import Lock, Thread
+from threading import Lock, Thread, Timer
 
 import urllib.request
 import urllib.error
@@ -46,6 +53,53 @@ warnings.filterwarnings(
 )
 
 sys.path.insert(0, str(Path(__file__).parent))
+
+try:
+    import local_store as _ls
+    _LOCAL_STORE_OK = True
+except ImportError:
+    _LOCAL_STORE_OK = False
+
+# ── Local dashboard HTML (served at /dashboard) ───────────────────────────
+_DASHBOARD_PATH = Path(__file__).parent / "static" / "local_dashboard.html"
+_DASHBOARD_HTML: bytes = b""
+
+def _load_dashboard() -> None:
+    global _DASHBOARD_HTML
+    if _DASHBOARD_PATH.exists():
+        _DASHBOARD_HTML = _DASHBOARD_PATH.read_bytes()
+    else:
+        _DASHBOARD_HTML = b"<h1>Dashboard not found</h1><p>core/static/local_dashboard.html missing.</p>"
+
+# ── SSE subscriber list ───────────────────────────────────────────────────
+_sse_clients: list[queue.Queue] = []
+_sse_lock    = Lock()
+
+def _sse_add(q: queue.Queue) -> None:
+    with _sse_lock:
+        _sse_clients.append(q)
+
+def _sse_remove(q: queue.Queue) -> None:
+    with _sse_lock:
+        try:
+            _sse_clients.remove(q)
+        except ValueError:
+            pass
+
+def _sse_broadcast(event: dict) -> None:
+    data = f"data: {json.dumps({**event, 'type': 'event'})}\n\n".encode()
+    with _sse_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            try:
+                _sse_clients.remove(q)
+            except ValueError:
+                pass
 
 _WASTE_SIGNATURES = [
     ("package-lock.json", ['"lockfileVersion"',    '"resolved": "https://']),
@@ -80,9 +134,19 @@ _print_lock = Lock()
 _ticker_on  = True
 
 
-# ── Server reporting (fire-and-forget) ────────────────────────────────────────
+# ── Event reporting (local store + SSE + optional remote server) ──────────────
+
+def _report_local(event: dict) -> None:
+    if _LOCAL_STORE_OK:
+        try:
+            _ls.record(event)
+        except Exception:
+            pass
+    _sse_broadcast(event)
+
 
 def _report_to_server(event: dict) -> None:
+    _report_local(event)
     url   = os.environ.get("SKIM_SERVER_URL", "").rstrip("/")
     token = os.environ.get("SKIM_SERVER_TOKEN", "")
     if not url or not token:
@@ -308,12 +372,16 @@ class _ProxyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, *_): pass
 
-    def _body(self) -> dict:
+    def _raw_body(self) -> bytes:
         n = int(self.headers.get("Content-Length", 0))
-        if n:
-            try: return json.loads(self.rfile.read(n))
-            except Exception: pass
-        return {}
+        return self.rfile.read(n) if n else b""
+
+    def _body(self) -> dict:
+        raw = self._raw_body()
+        try:
+            return json.loads(raw) if raw else {}
+        except Exception:
+            return {}
 
     def _send(self, code: int, body: bytes, ct: str = "application/json") -> None:
         self.send_response(code)
@@ -323,10 +391,41 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_OPTIONS(self): self._send(200, b"")
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Allow", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
-        if self.path.split("?")[0] == "/health":
+        path = self.path.split("?")[0]
+
+        # Local dashboard
+        if path == "/dashboard":
+            self._send(200, _DASHBOARD_HTML, "text/html; charset=utf-8")
+            return
+
+        # Redirect root to dashboard
+        if path == "/":
+            self.send_response(302)
+            self.send_header("Location", "/dashboard")
+            self.end_headers()
+            return
+
+        # SSE live event stream
+        if path == "/skim/stream":
+            self._sse_stream()
+            return
+
+        # Local analytics data API (no auth — localhost only)
+        if path.startswith("/skim/data/"):
+            self._local_data(path, self.path)
+            return
+
+        # Health check
+        if path == "/health":
             try:
                 from adapters import __version__
             except Exception:
@@ -343,31 +442,158 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                     "context_pct":   round(_session.total_input / max(self.context_limit, 1) * 100, 1),
                 },
             }).encode())
-        else:
-            self._send(404, b'{"error": "not found"}')
+            return
+
+        self._passthrough("GET")
+
+    def _sse_stream(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type",  "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection",    "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        q: queue.Queue = queue.Queue(maxsize=50)
+        _sse_add(q)
+        try:
+            # Send initial heartbeat so browser knows connection is alive
+            self.wfile.write(b":ok\n\n")
+            self.wfile.flush()
+            while True:
+                try:
+                    data = q.get(timeout=25)
+                    self.wfile.write(data)
+                    self.wfile.flush()
+                except queue.Empty:
+                    self.wfile.write(b":heartbeat\n\n")
+                    self.wfile.flush()
+        except Exception:
+            pass
+        finally:
+            _sse_remove(q)
+
+    def _local_data(self, path: str, full_path: str) -> None:
+        if not _LOCAL_STORE_OK:
+            self._send(503, b'{"error":"local_store not available"}')
+            return
+
+        from urllib.parse import urlparse, parse_qs
+        qs   = parse_qs(urlparse(full_path).query)
+        days = int(qs.get("days",  ["30"])[0])
+        lim  = int(qs.get("limit", ["200"])[0])
+
+        endpoint = path.removeprefix("/skim/data/").split("/")[0]
+        try:
+            if endpoint == "summary":
+                data = _ls.summary(days)
+            elif endpoint == "daily":
+                data = _ls.by_day(days)
+            elif endpoint == "hourly":
+                data = _ls.by_hour(days)
+            elif endpoint == "models":
+                data = _ls.by_model(days)
+            elif endpoint == "events":
+                data = _ls.recent_events(days, lim)
+            else:
+                self._send(404, b'{"error":"unknown endpoint"}')
+                return
+            self._send(200, json.dumps(data).encode())
+        except Exception as e:
+            self._send(500, json.dumps({"error": str(e)}).encode())
 
     def do_POST(self):
         path = self.path.split("?")[0]
-        body = self._body()
+        raw  = self._raw_body()
         if path == "/v1/messages":
+            try:
+                body = json.loads(raw) if raw else {}
+            except Exception:
+                body = {}
             self._anthropic(body)
         elif path == "/v1/chat/completions":
+            try:
+                body = json.loads(raw) if raw else {}
+            except Exception:
+                body = {}
             self._openai(body)
         else:
-            self._send(404, json.dumps({"error": f"unknown: {path}"}).encode())
+            self._passthrough("POST", raw)
+
+    def _passthrough(self, method: str, raw: bytes = b"") -> None:
+        """Transparently forward any unrecognised path to the real upstream API."""
+        plan, credential = self._auth_type()
+        openai_auth = (self.headers.get("Authorization") or "").strip()
+        openai_key  = openai_auth.removeprefix("Bearer ").strip() or os.environ.get("OPENAI_API_KEY", "")
+
+        if plan:
+            upstream = "https://api.anthropic.com"
+        elif openai_key:
+            upstream = "https://api.openai.com"
+        else:
+            self._send(404, json.dumps({"error": f"no upstream for {self.path}"}).encode())
+            return
+
+        url = upstream + self.path
+        req = urllib.request.Request(url, data=raw or None, method=method)
+        ct  = self.headers.get("Content-Type", "application/json")
+        req.add_header("Content-Type", ct)
+        if plan == "apikey":
+            req.add_header("x-api-key", credential)
+            req.add_header("anthropic-version", self.headers.get("anthropic-version", "2023-06-01"))
+            beta = self.headers.get("anthropic-beta", "")
+            if beta:
+                req.add_header("anthropic-beta", beta)
+        elif plan == "oauth":
+            req.add_header("Authorization", credential)
+            req.add_header("anthropic-version", self.headers.get("anthropic-version", "2023-06-01"))
+        elif openai_key:
+            req.add_header("Authorization", f"Bearer {openai_key}")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                data = r.read()
+                self.send_response(r.status)
+                self.send_header("Content-Type",   r.headers.get("Content-Type", "application/json"))
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            data = e.read()
+            self.send_response(e.code)
+            self.send_header("Content-Type",   "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            self._send(502, json.dumps({"error": str(e)}).encode())
 
     # ── Anthropic ─────────────────────────────────────────────────────────────
 
+    def _auth_type(self) -> tuple[str, str]:
+        """
+        Detect which Anthropic plan the caller is on.
+        Returns ('apikey', key) for API key plans, ('oauth', bearer) for Pro/OAuth plans,
+        or ('', '') if no valid auth is present.
+        Extend this method to support future plan types (enterprise SSO, team tokens, etc.).
+        """
+        api_key = self.headers.get("x-api-key") or os.environ.get("ANTHROPIC_API_KEY", "")
+        if api_key:
+            return "apikey", api_key
+        auth = (self.headers.get("Authorization") or "").strip()
+        if auth.startswith("Bearer "):
+            return "oauth", auth
+        return "", ""
+
     def _anthropic(self, body: dict) -> None:
-        api_key = (self.headers.get("x-api-key") or
-                   os.environ.get("ANTHROPIC_API_KEY", ""))
-        if not api_key:
-            self._send(401, b'{"error": "ANTHROPIC_API_KEY not set"}')
+        plan, credential = self._auth_type()
+        if not plan:
+            self._send(401, b'{"error": "No Anthropic auth: set ANTHROPIC_API_KEY (API plan) or start via Claude Pro login (OAuth plan)"}')
             return
 
         t0 = time.time()
 
-        # Filter waste
+        # Waste filtering — all plans benefit
         no_filter = os.environ.get("SKIM_NO_FILTER") or self.no_filter
         if not no_filter:
             filtered_msgs, saved = _filter_messages(body.get("messages", []))
@@ -375,19 +601,20 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         else:
             saved = 0
 
-        # Inject prompt caching
+        # Prompt caching injection — API key plan only
+        # Pro/OAuth plan has its own caching layer; injecting cache_control breaks it
         no_cache = os.environ.get("SKIM_NO_CACHE") or self.no_cache
-        if not no_cache:
+        if not no_cache and plan == "apikey":
             body = _inject_caching(body)
 
         streaming = body.get("stream", False)
         if streaming:
-            self._anthropic_stream(body, api_key, saved, t0)
+            self._anthropic_stream(body, plan, credential, saved, t0)
         else:
-            self._anthropic_sync(body, api_key, saved, t0)
+            self._anthropic_sync(body, plan, credential, saved, t0)
 
-    def _anthropic_sync(self, body: dict, api_key: str, saved: int, t0: float) -> None:
-        status, resp = self._call_anthropic(body, api_key, self.headers.get("anthropic-beta", ""))
+    def _anthropic_sync(self, body: dict, plan: str, credential: str, saved: int, t0: float) -> None:
+        status, resp = self._call_anthropic(body, plan, credential, self.headers.get("anthropic-beta", ""))
 
         usage  = resp.get("usage", {})
         inp    = usage.get("input_tokens",         0)
@@ -406,13 +633,16 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         })
         self._send(status, json.dumps(resp).encode())
 
-    def _anthropic_stream(self, body: dict, api_key: str, saved: int, t0: float) -> None:
+    def _anthropic_stream(self, body: dict, plan: str, credential: str, saved: int, t0: float) -> None:
         url  = "https://api.anthropic.com/v1/messages"
         data = json.dumps(body).encode()
         req  = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type",      "application/json")
-        req.add_header("x-api-key",         api_key)
         req.add_header("anthropic-version", "2023-06-01")
+        if plan == "apikey":
+            req.add_header("x-api-key", credential)
+        else:
+            req.add_header("Authorization", credential)
         beta = self.headers.get("anthropic-beta", "")
         if beta:
             req.add_header("anthropic-beta", beta)
@@ -442,6 +672,16 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                                 out = ev.get("usage", {}).get("output_tokens", 0)
                         except Exception:
                             pass
+        except urllib.error.HTTPError as e:
+            try:
+                err_body = json.loads(e.read())
+            except Exception:
+                err_body = {"message": str(e)}
+            err = f'data: {json.dumps({"type":"error","error":err_body,"status":e.code})}\n\n'
+            try:
+                self.wfile.write(err.encode()); self.wfile.flush()
+            except Exception:
+                pass
         except Exception as e:
             err = f'data: {json.dumps({"type":"error","error":str(e)})}\n\n'
             try:
@@ -460,20 +700,26 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             "latency_ms": ms, "session_id": id(_session),
         })
 
-    def _call_anthropic(self, body: dict, api_key: str, beta: str = "") -> tuple[int, dict]:
+    def _call_anthropic(self, body: dict, plan: str, credential: str, beta: str = "") -> tuple[int, dict]:
         url  = "https://api.anthropic.com/v1/messages"
         data = json.dumps(body).encode()
         req  = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Content-Type",      "application/json")
-        req.add_header("x-api-key",         api_key)
         req.add_header("anthropic-version", "2023-06-01")
+        if plan == "apikey":
+            req.add_header("x-api-key", credential)
+        else:
+            req.add_header("Authorization", credential)
         if beta:
             req.add_header("anthropic-beta", beta)
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read())
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": {"type": "http_error", "message": str(e)}}
         except Exception as e:
             return 500, {"error": str(e)}
 
@@ -538,6 +784,16 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                                 out = u.get("completion_tokens", out)
                         except Exception:
                             pass
+        except urllib.error.HTTPError as e:
+            try:
+                err_body = json.loads(e.read())
+            except Exception:
+                err_body = {"message": str(e)}
+            err = f'data: {json.dumps({"error": err_body, "status": e.code})}\n\n'
+            try:
+                self.wfile.write(err.encode()); self.wfile.flush()
+            except Exception:
+                pass
         except Exception as e:
             err = f'data: {json.dumps({"error": str(e)})}\n\n'
             try:
@@ -565,9 +821,19 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             with urllib.request.urlopen(req, timeout=300) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
-            return e.code, json.loads(e.read())
+            try:
+                return e.code, json.loads(e.read())
+            except Exception:
+                return e.code, {"error": {"type": "http_error", "message": str(e)}}
         except Exception as e:
             return 500, {"error": str(e)}
+
+
+# ── HTTP server with address reuse ────────────────────────────────────────────
+
+class _ReuseHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads      = True
 
 
 # ── Server entry point ────────────────────────────────────────────────────────
@@ -580,24 +846,39 @@ def serve(
     model:         str  = "claude",
     no_filter:     bool = False,
     no_cache:      bool = False,
+    no_browser:    bool = False,
 ) -> None:
     global _ticker_on
+
+    # Init local event store and load dashboard HTML
+    if _LOCAL_STORE_OK:
+        try:
+            _ls.init()
+        except Exception:
+            pass
+    _load_dashboard()
 
     _ProxyHandler.context_limit = context_limit
     _ProxyHandler.model         = model
     _ProxyHandler.no_filter     = no_filter
     _ProxyHandler.no_cache      = no_cache
 
-    server = HTTPServer((host, port), _ProxyHandler)
+    try:
+        server = _ReuseHTTPServer((host, port), _ProxyHandler)
+    except OSError as e:
+        print(f"\n  {RED}✗ Cannot bind to {host}:{port} — {e}{NC}")
+        print(f"  {DIM}Is another instance running? Try: skim proxy --port {port + 1}{NC}\n")
+        return
 
     W = 62
-    proj     = str(project_path or Path(".").resolve())[:42]
-    hp       = f"http://{host}:{port}"
-    filt_c   = f"{RED}off{NC} (--no-filter)"   if no_filter else f"{GREEN}on{NC} — strips waste from tool results"
-    cache_c  = f"{RED}off{NC} (--no-cache)"    if no_cache  else f"{GREEN}on{NC} — auto-injects prompt caching"
-    filt_l   = "off (--no-filter)"             if no_filter else "on — strips waste from tool results"
-    cache_l  = "off (--no-cache)"              if no_cache  else "on — auto-injects prompt caching"
-    model_l  = f"{model}  ({context_limit:,} token limit)"
+    proj      = str(project_path or Path(".").resolve())[:42]
+    hp        = f"http://{host}:{port}"
+    dash_url  = f"{hp}/dashboard"
+    filt_c    = f"{RED}off{NC} (--no-filter)"   if no_filter else f"{GREEN}on{NC} — strips waste from tool results"
+    cache_c   = f"{RED}off{NC} (--no-cache)"    if no_cache  else f"{GREEN}on{NC} — auto-injects prompt caching"
+    filt_l    = "off (--no-filter)"             if no_filter else "on — strips waste from tool results"
+    cache_l   = "off (--no-cache)"              if no_cache  else "on — auto-injects prompt caching"
+    model_l   = f"{model}  ({context_limit:,} token limit)"
 
     def line(label: str, plain: str, colored: str) -> None:
         pad = W - 2 - len(label) - 2 - len(plain)
@@ -615,11 +896,12 @@ def serve(
     print(f"\n  {BOLD}┌{'─'*W}┐{NC}")
     print(f"  {BOLD}│{NC}  {CYAN}{BOLD}skim{NC} {DIM}v{_ver}{NC}  — runtime token proxy{' '*(W-32-len(_ver))}{BOLD}│{NC}")
     print(f"  {BOLD}├{'─'*W}┤{NC}")
-    line("listening", hp,       f"{CYAN}{hp}{NC}")
-    line("model    ", model_l,  f"{model}  {DIM}({context_limit:,} token limit){NC}")
-    line("project  ", proj,     f"{DIM}{proj}{NC}")
-    line("filtering", filt_l,   filt_c)
-    line("caching  ", cache_l,  cache_c)
+    line("listening", hp,        f"{CYAN}{hp}{NC}")
+    line("dashboard", dash_url,  f"{CYAN}{dash_url}{NC}")
+    line("model    ", model_l,   f"{model}  {DIM}({context_limit:,} token limit){NC}")
+    line("project  ", proj,      f"{DIM}{proj}{NC}")
+    line("filtering", filt_l,    filt_c)
+    line("caching  ", cache_l,   cache_c)
     print(f"  {BOLD}├{'─'*W}┤{NC}")
     print(f"  {BOLD}│{NC}  {YELLOW}Claude Code / Cursor:{NC}{' '*(W-21)}{BOLD}│{NC}")
     cmd_line(f"export ANTHROPIC_BASE_URL={hp}", f"{CYAN}export ANTHROPIC_BASE_URL={hp}{NC}")
@@ -627,9 +909,12 @@ def serve(
     print(f"  {BOLD}│{NC}  {YELLOW}OpenAI-compatible tools:{NC}{' '*(W-25)}{BOLD}│{NC}")
     cmd_line(f"export OPENAI_BASE_URL={hp}", f"{CYAN}export OPENAI_BASE_URL={hp}{NC}")
     print(f"  {BOLD}├{'─'*W}┤{NC}")
-    footer = f"health  {hp}/health   Ctrl+C to stop"
+    footer = f"Ctrl+C to stop   data → ~/.skim/events.db"
     print(f"  {BOLD}│{NC}  {DIM}{footer}{NC}{' '*(W-2-len(footer))}{BOLD}│{NC}")
     print(f"  {BOLD}└{'─'*W}┘{NC}\n")
+
+    if not no_browser:
+        Timer(1.5, lambda: webbrowser.open(dash_url)).start()
 
     _ticker_on = True
     ticker = Thread(target=_live_ticker, args=(context_limit,), daemon=True)
@@ -642,6 +927,7 @@ def serve(
     finally:
         _ticker_on = False
         ticker.join(timeout=1)
+        server.server_close()
 
     usd_total = (_session.total_input * 3 + _session.total_output * 15) / 1_000_000
     saved_usd = _session.total_saved * 3 / 1_000_000

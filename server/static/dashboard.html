@@ -346,18 +346,125 @@ tr:hover td { background: rgba(255,255,255,.02); }
       </div>
     </div>
 
-    <!-- Placeholder pages -->
+    <!-- Sessions -->
     <div class="content" id="page-sessions" style="display:none">
-      <p style="color:var(--muted)">Session view — coming in next release.</p>
+      <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center">
+        <input type="text" id="session-search" placeholder="Filter by model…"
+          style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+                 padding:8px 12px;border-radius:7px;font-size:13px"
+          oninput="filterSessions()"/>
+        <select class="period-select" id="session-period" onchange="loadSessions()">
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">All API Calls</div>
+          <span class="badge badge-blue" id="session-count">—</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>#</th><th>Timestamp (UTC)</th><th>Model</th>
+            <th>Tokens In</th><th>Tokens Out</th><th>Saved</th><th>Cached</th>
+            <th>Cost</th><th>Latency</th>
+          </tr></thead>
+          <tbody id="sessions-table"></tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Usage -->
     <div class="content" id="page-usage" style="display:none">
-      <p style="color:var(--muted)">Deep usage analysis — coming in next release.</p>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="chart-card">
+          <div class="chart-title">
+            Hourly Activity
+            <select class="period-select" id="hour-period" onchange="loadUsage()" style="font-size:11px">
+              <option value="1">Today</option><option value="3">3 days</option>
+              <option value="7" selected>7 days</option>
+            </select>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Daily Calls</div>
+          <div class="chart-wrap"><canvas id="chart-daily-calls"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Daily Breakdown</div></div>
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Calls</th><th>Tokens In</th>
+            <th>Tokens Saved</th><th>Cost</th><th>Save %</th>
+          </tr></thead>
+          <tbody id="usage-table"></tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Models -->
     <div class="content" id="page-models" style="display:none">
-      <p style="color:var(--muted)">Model comparison — coming in next release.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="chart-card">
+          <div class="chart-title">Tokens by Model</div>
+          <div class="chart-wrap"><canvas id="chart-model-tok"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Cost by Model</div>
+          <div class="chart-wrap"><canvas id="chart-model-cost"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><div class="table-title">Model Comparison</div></div>
+        <table>
+          <thead><tr>
+            <th>Model</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th>
+            <th>Cost</th><th>Cost/1k In</th><th>Cache Hit %</th><th>Waste %</th><th>Avg Latency</th>
+          </tr></thead>
+          <tbody id="models-table"></tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- Savings -->
     <div class="content" id="page-savings" style="display:none">
-      <p style="color:var(--muted)">Savings report — coming in next release.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="card" style="text-align:center">
+          <div class="card-label">Tokens Saved by skim</div>
+          <div class="card-value" id="sv-tokens" style="font-size:32px;color:var(--success)">—</div>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="card-label">Estimated $ Saved</div>
+          <div class="card-value" id="sv-usd" style="font-size:32px;color:var(--success)">—</div>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="card-label">Saved via Cache Hits</div>
+          <div class="card-value" id="sv-cache" style="font-size:32px;color:var(--accent)">—</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="chart-card">
+          <div class="chart-title">Cumulative Savings Over Time</div>
+          <div class="chart-wrap"><canvas id="chart-cumulative"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Daily Save Rate (%)</div>
+          <div class="chart-wrap"><canvas id="chart-save-rate"></canvas></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="chart-card">
+          <div class="chart-title">Sent vs Saved vs Cached</div>
+          <div class="chart-wrap"><canvas id="chart-sv-breakdown"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Savings by Model</div>
+          <div class="chart-wrap"><canvas id="chart-sv-model"></canvas></div>
+        </div>
+      </div>
     </div>
     <div class="content" id="page-settings" style="display:none">
       <div class="chart-card" style="max-width:520px">
@@ -500,6 +607,10 @@ function showPage(name) {
   if (name === 'overview')  refresh();
   if (name === 'team')      loadTeam();
   if (name === 'insights')  loadInsights();
+  if (name === 'sessions')  loadSessions();
+  if (name === 'usage')     loadUsage();
+  if (name === 'models')    loadModels();
+  if (name === 'savings')   loadSavings();
 }
 
 function changePeriod() {
@@ -741,11 +852,214 @@ async function createApiKey() {
   document.getElementById('key-hint').textContent = data.key;
 }
 
+// ── SSE live updates ──────────────────────────────────────────────────────
+let _sse = null;
+function connectSSE() {
+  if (_sse) { _sse.close(); _sse = null; }
+  _sse = new EventSource(`${API}/skim/stream`);
+  _sse.onmessage = e => {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'event') setTimeout(refresh, 300);
+    } catch {}
+  };
+  _sse.onerror = () => setTimeout(connectSSE, 15000);
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+let _allSessions = [];
+async function loadSessions() {
+  const d = parseInt(document.getElementById('session-period')?.value || '7');
+  const data = await api(`/api/v1/events?days=${d}&limit=500`);
+  _allSessions = data?.events || [];
+  filterSessions();
+}
+function filterSessions() {
+  const q = (document.getElementById('session-search')?.value || '').toLowerCase();
+  const rows = _allSessions.filter(e =>
+    !q || (e.model||'').toLowerCase().includes(q)
+  );
+  document.getElementById('session-count').textContent = `${rows.length} calls`;
+  const tb = document.getElementById('sessions-table');
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:24px">No events yet.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map((e,i) => {
+    const saved = e.saved_tokens||0;
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="color:var(--muted);white-space:nowrap">${(e.ts||'').replace('T',' ').slice(0,19)}</td>
+      <td><span class="badge badge-blue">${e.model||'—'}</span></td>
+      <td>${fmtN(e.input_tokens)}</td><td>${fmtN(e.output_tokens)}</td>
+      <td>${saved>0?`<span class="badge badge-green">−${fmtN(saved)}</span>`:'—'}</td>
+      <td>${(e.cached_tokens||0)>0?fmtN(e.cached_tokens):'—'}</td>
+      <td>${fmtCost(e.cost_usd)}</td>
+      <td style="color:var(--muted)">${e.latency_ms?e.latency_ms+'ms':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Usage ─────────────────────────────────────────────────────────────────
+async function loadUsage() {
+  const hd = parseInt(document.getElementById('hour-period')?.value || '7');
+  const [hourly, daily] = await Promise.all([
+    api(`/api/v1/stats/hourly?days=${hd}`),
+    api(`/api/v1/stats/daily?days=${_days}`),
+  ]);
+  const CL = {grid:'rgba(255,255,255,.05)',text:'#7a7f8e'};
+  if (hourly?.data) {
+    if (_charts['chart-hourly']) _charts['chart-hourly'].destroy();
+    _charts['chart-hourly'] = new Chart(document.getElementById('chart-hourly'), {
+      type:'bar', data:{
+        labels: hourly.data.map(r=>r.hour.slice(8)+'h'),
+        datasets:[{label:'Tokens',data:hourly.data.map(r=>r.input_tokens||0),
+          backgroundColor:'rgba(108,99,255,.5)'}],
+      }, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text}},y:{grid:{color:CL.grid},ticks:{color:CL.text,callback:v=>fmtN(v)}}}},
+    });
+  }
+  if (daily?.data) {
+    if (_charts['chart-daily-calls']) _charts['chart-daily-calls'].destroy();
+    _charts['chart-daily-calls'] = new Chart(document.getElementById('chart-daily-calls'), {
+      type:'bar', data:{
+        labels: daily.data.map(r=>r.day.slice(5)),
+        datasets:[{label:'Calls',data:daily.data.map(r=>r.calls||0),backgroundColor:'rgba(0,212,170,.5)'}],
+      }, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text}},y:{grid:{color:CL.grid},ticks:{color:CL.text}}}},
+    });
+    const tb = document.getElementById('usage-table');
+    tb.innerHTML = [...(daily.data||[])].reverse().map(r => {
+      const sp = r.input_tokens ? ((r.saved_tokens||0)/r.input_tokens*100).toFixed(1) : 0;
+      return `<tr>
+        <td>${r.day}</td><td>${r.calls}</td><td>${fmtN(r.input_tokens)}</td>
+        <td>${fmtN(r.saved_tokens)}</td><td>${fmtCost(r.cost_usd)}</td>
+        <td><span class="badge ${sp>30?'badge-green':'badge-warn'}">${sp}%</span></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px">No data.</td></tr>';
+  }
+}
+
+// ── Models ────────────────────────────────────────────────────────────────
+async function loadModels() {
+  const data = await api(`/api/v1/stats/by-model?days=${_days}`);
+  const rows = data?.data || [];
+  const CL = {grid:'rgba(255,255,255,.05)',text:'#7a7f8e'};
+  const cols = ['#6c63ff','#00d4aa','#f5a623','#ff4d6d','#3b82f6','#a78bfa','#fb923c'];
+  ['chart-model-tok','chart-model-cost'].forEach(id => {
+    if (_charts[id]) _charts[id].destroy();
+  });
+  _charts['chart-model-tok'] = new Chart(document.getElementById('chart-model-tok'), {
+    type:'doughnut', data:{
+      labels: rows.map(r=>r.model),
+      datasets:[{data:rows.map(r=>r.input_tokens||0),backgroundColor:cols.slice(0,rows.length),borderWidth:0}],
+    }, options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'right',labels:{color:CL.text,font:{size:11},boxWidth:10}}}},
+  });
+  _charts['chart-model-cost'] = new Chart(document.getElementById('chart-model-cost'), {
+    type:'doughnut', data:{
+      labels: rows.map(r=>r.model),
+      datasets:[{data:rows.map(r=>r.cost_usd||0),backgroundColor:cols.slice(0,rows.length),borderWidth:0}],
+    }, options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'right',labels:{color:CL.text,font:{size:11},boxWidth:10}}}},
+  });
+  const tb = document.getElementById('models-table');
+  if (!rows.length) {
+    tb.innerHTML='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:24px">No model data.</td></tr>';
+    return;
+  }
+  tb.innerHTML = rows.map(m => {
+    const cpk = m.input_tokens ? (m.cost_usd/m.input_tokens*1000).toFixed(4) : '0';
+    const cc = (m.cache_hit_pct||0)>50?'badge-green':(m.cache_hit_pct||0)>20?'badge-warn':'badge-red';
+    const wc = (m.waste_pct||0)>30?'badge-red':(m.waste_pct||0)>10?'badge-warn':'badge-green';
+    return `<tr>
+      <td><strong>${m.model}</strong></td><td>${m.calls}</td>
+      <td>${fmtN(m.input_tokens)}</td><td>${fmtN(m.output_tokens)}</td>
+      <td>${fmtCost(m.cost_usd)}</td><td style="color:var(--muted)">$${cpk}/k</td>
+      <td><span class="badge ${cc}">${m.cache_hit_pct||0}%</span></td>
+      <td><span class="badge ${wc}">${m.waste_pct||0}%</span></td>
+      <td style="color:var(--muted)">${m.avg_latency_ms?m.avg_latency_ms+'ms':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Savings ───────────────────────────────────────────────────────────────
+async function loadSavings() {
+  const [sum, daily, models] = await Promise.all([
+    api(`/api/v1/stats/summary?days=${_days}`),
+    api(`/api/v1/stats/daily?days=${_days}`),
+    api(`/api/v1/stats/by-model?days=${_days}`),
+  ]);
+  const CL = {grid:'rgba(255,255,255,.05)',text:'#7a7f8e'};
+  const cols = ['#6c63ff','#00d4aa','#f5a623','#ff4d6d','#3b82f6'];
+  if (sum) {
+    document.getElementById('sv-tokens').textContent = fmtN(sum.total_saved);
+    document.getElementById('sv-usd').textContent    = fmtCost((sum.total_saved||0)*3/1e6);
+    document.getElementById('sv-cache').textContent  = fmtN(sum.total_cached||0);
+  }
+  if (daily?.data) {
+    let cum = 0;
+    const cumData = daily.data.map(r => { cum += (r.saved_tokens||0); return cum; });
+    ['chart-cumulative','chart-save-rate','chart-sv-breakdown'].forEach(id => {
+      if (_charts[id]) _charts[id].destroy();
+    });
+    _charts['chart-cumulative'] = new Chart(document.getElementById('chart-cumulative'), {
+      type:'line', data:{
+        labels: daily.data.map(r=>r.day.slice(5)),
+        datasets:[{label:'Cumulative saved',data:cumData,borderColor:'#00d4aa',
+          backgroundColor:'rgba(0,212,170,.08)',fill:true,tension:.4,pointRadius:3}],
+      }, options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text}},
+                y:{grid:{color:CL.grid},ticks:{color:CL.text,callback:v=>fmtN(v)}}}},
+    });
+    _charts['chart-save-rate'] = new Chart(document.getElementById('chart-save-rate'), {
+      type:'bar', data:{
+        labels: daily.data.map(r=>r.day.slice(5)),
+        datasets:[{label:'Save %',
+          data:daily.data.map(r=>r.input_tokens?((r.saved_tokens||0)/r.input_tokens*100).toFixed(1):0),
+          backgroundColor:'rgba(0,212,170,.55)'}],
+      }, options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text}},
+                y:{grid:{color:CL.grid},ticks:{color:CL.text,callback:v=>v+'%'}}}},
+    });
+    _charts['chart-sv-breakdown'] = new Chart(document.getElementById('chart-sv-breakdown'), {
+      type:'bar', data:{
+        labels: daily.data.map(r=>r.day.slice(5)),
+        datasets:[
+          {label:'Sent',  data:daily.data.map(r=>r.input_tokens||0), backgroundColor:'rgba(108,99,255,.45)'},
+          {label:'Saved', data:daily.data.map(r=>r.saved_tokens||0), backgroundColor:'rgba(0,212,170,.55)'},
+        ],
+      }, options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text}},
+                y:{grid:{color:CL.grid},ticks:{color:CL.text,callback:v=>fmtN(v)}}}},
+    });
+  }
+  if (models?.data) {
+    if (_charts['chart-sv-model']) _charts['chart-sv-model'].destroy();
+    _charts['chart-sv-model'] = new Chart(document.getElementById('chart-sv-model'), {
+      type:'bar', data:{
+        labels: models.data.map(m=>m.model),
+        datasets:[
+          {label:'Saved',  data:models.data.map(m=>m.saved_tokens||0),  backgroundColor:'rgba(0,212,170,.55)'},
+          {label:'Cached', data:models.data.map(m=>m.cached_tokens||0), backgroundColor:'rgba(108,99,255,.45)'},
+        ],
+      }, options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:CL.text}}},
+        scales:{x:{grid:{color:CL.grid},ticks:{color:CL.text,callback:v=>fmtN(v)}},
+                y:{grid:{color:CL.grid},ticks:{color:CL.text}}}},
+    });
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 (async () => {
   loadOidcProviders();
   if (_token && await checkAuth()) {
     bootApp();
+    connectSSE();
   }
 })();
 </script>

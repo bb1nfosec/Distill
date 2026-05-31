@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>skim — Local Token Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:      #0d0f14; --surface: #161920; --border:  #252832;
+  --text:    #e2e4ea; --muted:   #7a7f8e; --accent:  #6c63ff;
+  --accent2: #00d4aa; --warn:    #f5a623; --danger:  #ff4d6d;
+  --success: #00d4aa; --font: 'Inter','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.6}
+.shell{display:flex;min-height:100vh}
+.sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);
+         display:flex;flex-direction:column;position:fixed;height:100vh;z-index:20}
+.main{margin-left:210px;flex:1;display:flex;flex-direction:column}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);
+        padding:0 24px;height:52px;display:flex;align-items:center;
+        justify-content:space-between;position:sticky;top:0;z-index:10}
+.content{padding:24px;flex:1;display:none}
+.content.active{display:block}
+.brand{padding:18px 18px 14px;border-bottom:1px solid var(--border)}
+.brand-name{font-size:20px;font-weight:700;color:var(--accent);letter-spacing:-.5px}
+.brand-tag{font-size:11px;color:var(--muted);margin-top:2px}
+.live-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+          background:var(--success);margin-right:5px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.nav{padding:10px 6px;flex:1;overflow-y:auto}
+.nav-section{color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;
+             letter-spacing:1px;padding:10px 12px 5px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:7px;
+          color:var(--muted);cursor:pointer;transition:all .12s;margin:1px 0;
+          text-decoration:none;user-select:none}
+.nav-item:hover{background:rgba(108,99,255,.1);color:var(--text)}
+.nav-item.active{background:rgba(108,99,255,.15);color:var(--accent)}
+.nav-icon{width:16px;text-align:center;font-size:13px}
+.sidebar-footer{padding:12px;border-top:1px solid var(--border)}
+.proxy-info{font-size:11px;color:var(--muted);line-height:1.8}
+.proxy-info code{color:var(--accent2);font-size:10px}
+.topbar-title{font-size:15px;font-weight:600}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.period-select{background:var(--border);border:1px solid var(--border);color:var(--text);
+               padding:5px 9px;border-radius:6px;font-size:12px;cursor:pointer}
+.btn{padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;
+     border:none;transition:all .12s}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+.live-badge{background:rgba(0,212,170,.12);color:var(--success);border:1px solid rgba(0,212,170,.3);
+            padding:4px 10px;border-radius:12px;font-size:11px;font-weight:600}
+/* Cards */
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.card-label{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;
+            letter-spacing:.5px;margin-bottom:6px}
+.card-value{font-size:26px;font-weight:700;color:var(--text);letter-spacing:-1px}
+.card-sub{font-size:11px;margin-top:5px;color:var(--muted)}
+.card-sub.good{color:var(--success)} .card-sub.bad{color:var(--danger)}
+.card-icon{float:right;font-size:22px;opacity:.45}
+.hbar{height:5px;border-radius:3px;background:var(--border);margin-top:8px}
+.hbar-fill{height:100%;border-radius:3px;transition:width .6s}
+.hbar-fill.green{background:var(--success)} .hbar-fill.warn{background:var(--warn)} .hbar-fill.red{background:var(--danger)}
+/* Charts */
+.charts{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px}
+.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.chart-wrap{position:relative;height:200px}
+/* Table */
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.table-header{padding:14px 18px;border-bottom:1px solid var(--border);
+              display:flex;justify-content:space-between;align-items:center}
+.table-title{font-size:13px;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 18px;text-align:left;border-bottom:1px solid var(--border)}
+th{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{font-size:12px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.018)}
+/* Badges */
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
+.badge-green{background:rgba(0,212,170,.12);color:var(--success)}
+.badge-red{background:rgba(255,77,109,.12);color:var(--danger)}
+.badge-blue{background:rgba(108,99,255,.12);color:var(--accent)}
+.badge-warn{background:rgba(245,166,35,.12);color:var(--warn)}
+.badge-muted{background:rgba(122,127,142,.1);color:var(--muted)}
+/* Empty state */
+.empty{text-align:center;padding:48px 24px;color:var(--muted)}
+.empty h3{font-size:16px;color:var(--text);margin-bottom:8px}
+.empty p{font-size:13px;line-height:1.8}
+.empty code{color:var(--accent2)}
+/* Savings big number */
+.big-metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+            padding:28px;text-align:center;margin-bottom:20px}
+.big-num{font-size:52px;font-weight:800;letter-spacing:-2px;color:var(--success)}
+.big-label{font-size:14px;color:var(--muted);margin-top:4px}
+/* Search */
+.search-bar{display:flex;gap:10px;margin-bottom:16px;align-items:center}
+.search-bar input{flex:1;background:var(--surface);border:1px solid var(--border);
+                  color:var(--text);padding:8px 12px;border-radius:7px;font-size:13px}
+.search-bar input:focus{outline:none;border-color:var(--accent)}
+/* Toast */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--accent);
+       color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;
+       display:none;z-index:999;animation:slidein .2s ease}
+@keyframes slidein{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+/* Responsive */
+@media(max-width:1100px){.cards{grid-template-columns:repeat(2,1fr)}.charts{grid-template-columns:1fr}}
+@media(max-width:700px){.sidebar{width:0;overflow:hidden}.main{margin-left:0}.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="brand">
+      <div class="brand-name">skim</div>
+      <div class="brand-tag"><span class="live-dot"></span>Local Proxy Dashboard</div>
+    </div>
+    <div class="nav">
+      <div class="nav-section">Monitor</div>
+      <div class="nav-item active" onclick="nav('overview')"><span class="nav-icon">◈</span> Overview</div>
+      <div class="nav-item" onclick="nav('sessions')"><span class="nav-icon">⚡</span> Sessions</div>
+      <div class="nav-section">Analyse</div>
+      <div class="nav-item" onclick="nav('usage')"><span class="nav-icon">📊</span> Usage</div>
+      <div class="nav-item" onclick="nav('models')"><span class="nav-icon">🤖</span> Models</div>
+      <div class="nav-item" onclick="nav('savings')"><span class="nav-icon">💰</span> Savings</div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="proxy-info">
+        Proxy: <code id="proxy-url">—</code><br>
+        DB: <code>~/.skim/events.db</code>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Overview</div>
+      <div class="topbar-right">
+        <select class="period-select" id="period" onchange="reload()">
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <div class="live-badge" id="sse-badge">● LIVE</div>
+        <button class="btn btn-ghost" onclick="reload()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="content active" id="page-overview">
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">📤</div>
+          <div class="card-label">Tokens Sent</div>
+          <div class="card-value" id="c-input">—</div>
+          <div class="card-sub" id="c-calls">— calls</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💵</div>
+          <div class="card-label">Est. Cost</div>
+          <div class="card-value" id="c-cost">—</div>
+          <div class="card-sub" id="c-avg-cost">—/call avg</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">✂️</div>
+          <div class="card-label">Tokens Saved</div>
+          <div class="card-value" id="c-saved">—</div>
+          <div class="card-sub good" id="c-save-pct">— reduction</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <div class="card-label">Cache Hits</div>
+          <div class="card-value" id="c-cached">—</div>
+          <div class="card-sub" id="c-cache-pct">— of input</div>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">Token Usage Over Time</div>
+          <div class="chart-wrap"><canvas id="ch-usage"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">By Model</div>
+          <div class="chart-wrap"><canvas id="ch-model"></canvas></div>
+        </div>
+      </div>
+      <div class="charts-2">
+        <div class="chart-card">
+          <div class="chart-title">Sent vs Saved</div>
+          <div class="chart-wrap"><canvas id="ch-savings"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Cost Per Day</div>
+          <div class="chart-wrap"><canvas id="ch-cost"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Recent API Calls</div>
+          <span class="badge badge-blue" id="c-events-count">—</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Model</th><th>Provider</th>
+            <th>In</th><th>Out</th><th>Saved</th><th>Cached</th><th>Cost</th><th>Latency</th>
+          </tr></thead>
+          <tbody id="overview-events"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SESSIONS -->
+    <div class="content" id="page-sessions">
+      <div class="search-bar">
+        <input type="text" id="session-search" placeholder="Filter by model or provider…" oninput="filterSessions()"/>
+        <select class="period-select" id="session-period" onchange="loadSessions()">
+          <option value="1">Today</option>
+          <option value="7" selected>Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">All API Calls</div>
+          <span class="badge badge-blue" id="session-count">—</span>
+        </div>
+        <table>
+          <thead><tr>
+            <th>#</th><th>Timestamp (UTC)</th><th>Provider</th><th>Model</th>
+            <th>Tokens In</th><th>Tokens Out</th><th>Saved</th><th>Cached</th>
+            <th>Cost</th><th>Latency</th><th>Plan</th>
+          </tr></thead>
+          <tbody id="sessions-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USAGE -->
+    <div class="content" id="page-usage">
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">
+            Hourly Activity
+            <select class="period-select" id="hour-period" onchange="loadUsage()" style="font-size:11px">
+              <option value="1">Today</option>
+              <option value="3">Last 3 days</option>
+              <option value="7" selected>Last 7 days</option>
+            </select>
+          </div>
+          <div class="chart-wrap"><canvas id="ch-hourly"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Daily Calls</div>
+          <div class="chart-wrap"><canvas id="ch-daily-calls"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Daily Breakdown</div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Calls</th><th>Tokens In</th><th>Tokens Saved</th>
+            <th>Cache Hits</th><th>Cost</th><th>Save %</th>
+          </tr></thead>
+          <tbody id="usage-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MODELS -->
+    <div class="content" id="page-models">
+      <div class="charts-2" style="margin-bottom:20px">
+        <div class="chart-card">
+          <div class="chart-title">Token Distribution by Model</div>
+          <div class="chart-wrap"><canvas id="ch-model-dist"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Cost by Model</div>
+          <div class="chart-wrap"><canvas id="ch-model-cost"></canvas></div>
+        </div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Model Comparison</div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Model</th><th>Provider</th><th>Calls</th>
+            <th>Tokens In</th><th>Tokens Out</th><th>Cost</th>
+            <th>Cost/1k In</th><th>Cache Hit %</th><th>Waste %</th><th>Avg Latency</th>
+          </tr></thead>
+          <tbody id="models-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SAVINGS -->
+    <div class="content" id="page-savings">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px">
+        <div class="big-metric">
+          <div class="big-num" id="sv-tokens">—</div>
+          <div class="big-label">Total Tokens Saved by skim</div>
+        </div>
+        <div class="big-metric">
+          <div class="big-num" id="sv-usd">—</div>
+          <div class="big-label">Estimated $ Saved</div>
+        </div>
+        <div class="big-metric">
+          <div class="big-num" id="sv-cache-usd">—</div>
+          <div class="big-label">Saved via Cache Hits</div>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">Cumulative Savings Over Time</div>
+          <div class="chart-wrap"><canvas id="ch-cumulative"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Daily Save Rate (%)</div>
+          <div class="chart-wrap"><canvas id="ch-save-rate"></canvas></div>
+        </div>
+      </div>
+      <div class="charts-2">
+        <div class="chart-card">
+          <div class="chart-title">Tokens: Sent vs Saved vs Cached</div>
+          <div class="chart-wrap"><canvas id="ch-breakdown"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Savings by Model</div>
+          <div class="chart-wrap"><canvas id="ch-model-save"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div>
+
+<div id="toast"></div>
+
+<script>
+const BASE = window.location.origin;
+let _days = 7;
+let _charts = {};
+let _allSessions = [];
+let _sse = null;
+
+// ── Colours ────────────────────────────────────────────────────────────────
+const C = {
+  accent:'#6c63ff', green:'#00d4aa', warn:'#f5a623', red:'#ff4d6d',
+  blue:'#3b82f6', purple:'#a78bfa', orange:'#fb923c',
+  grid:'rgba(255,255,255,.04)', text:'#7a7f8e',
+};
+const PALETTE = [C.accent, C.green, C.warn, C.red, C.blue, C.purple, C.orange];
+
+// ── Nav ────────────────────────────────────────────────────────────────────
+const PAGES = ['overview','sessions','usage','models','savings'];
+function nav(name) {
+  PAGES.forEach(p => {
+    const el = document.getElementById('page-'+p);
+    if (el) el.classList.toggle('active', p === name);
+  });
+  document.querySelectorAll('.nav-item').forEach((el,i) => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  const titles = {overview:'Overview',sessions:'Sessions',usage:'Usage',
+                  models:'Models',savings:'Savings'};
+  document.getElementById('page-title').textContent = titles[name] || name;
+  if (name === 'sessions') loadSessions();
+  if (name === 'usage')    loadUsage();
+  if (name === 'models')   loadModels();
+  if (name === 'savings')  loadSavings();
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmtN(n) {
+  n = n||0;
+  if (n>=1e6) return (n/1e6).toFixed(1)+'M';
+  if (n>=1e3) return (n/1e3).toFixed(1)+'k';
+  return String(Math.round(n));
+}
+function fmtCost(v) {
+  if (!v || v===0) return '$0.00';
+  return v < 0.001 ? `$${v.toFixed(4)}` : `$${v.toFixed(3)}`;
+}
+function fmtTime(ts) {
+  if (!ts) return '—';
+  return ts.replace('T',' ').slice(0,19);
+}
+
+async function api(path) {
+  try {
+    const r = await fetch(BASE + path);
+    if (!r.ok) return null;
+    return r.json();
+  } catch { return null; }
+}
+
+function mkChart(id, type, data, opts={}) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (_charts[id]) _charts[id].destroy();
+  _charts[id] = new Chart(el, { type, data, options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ color:C.text, font:{size:11}, boxWidth:12 } } },
+    scales: type!=='doughnut' && type!=='pie' ? {
+      x:{ grid:{color:C.grid}, ticks:{color:C.text, font:{size:10}} },
+      y:{ grid:{color:C.grid}, ticks:{color:C.text, font:{size:10},
+          callback:v=>fmtN(v)} },
+    } : undefined,
+    ...opts,
+  }});
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display='none', 2500);
+}
+
+// ── SSE ────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (_sse) { _sse.close(); _sse=null; }
+  _sse = new EventSource(BASE + '/skim/stream');
+  _sse.onmessage = e => {
+    try {
+      const ev = JSON.parse(e.data);
+      if (ev.type === 'event') {
+        toast(`↻ ${ev.model || 'call'} — in:${fmtN(ev.input_tokens)} saved:${fmtN(ev.saved_tokens)}`);
+        setTimeout(reload, 400);
+      }
+    } catch {}
+  };
+  _sse.onopen = () => {
+    document.getElementById('sse-badge').textContent = '● LIVE';
+    document.getElementById('sse-badge').style.color = 'var(--success)';
+  };
+  _sse.onerror = () => {
+    document.getElementById('sse-badge').textContent = '○ offline';
+    document.getElementById('sse-badge').style.color = 'var(--muted)';
+    setTimeout(connectSSE, 10000);
+  };
+}
+
+// ── Overview ───────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const [sum, daily, models, events] = await Promise.all([
+    api(`/skim/data/summary?days=${_days}`),
+    api(`/skim/data/daily?days=${_days}`),
+    api(`/skim/data/models?days=${_days}`),
+    api(`/skim/data/events?days=${_days}&limit=25`),
+  ]);
+  if (sum)    renderSummaryCards(sum);
+  if (daily)  { renderUsageChart(daily); renderSavingsChart(daily); renderCostChart(daily); }
+  if (models) renderModelDonut(models);
+  if (events) renderOverviewEvents(events);
+}
+
+function renderSummaryCards(s) {
+  document.getElementById('c-input').textContent    = fmtN(s.total_input);
+  document.getElementById('c-calls').textContent    = `${s.total_calls||0} calls`;
+  document.getElementById('c-cost').textContent     = fmtCost(s.total_cost);
+  const avg = s.total_calls ? (s.total_cost/s.total_calls) : 0;
+  document.getElementById('c-avg-cost').textContent = `${fmtCost(avg)}/call`;
+  document.getElementById('c-saved').textContent    = fmtN(s.total_saved);
+  const sp = s.total_input ? ((s.total_saved||0)/s.total_input*100).toFixed(1) : 0;
+  document.getElementById('c-save-pct').textContent = `${sp}% reduction`;
+  document.getElementById('c-cached').textContent   = fmtN(s.total_cached);
+  const cp = s.total_input ? ((s.total_cached||0)/s.total_input*100).toFixed(1) : 0;
+  document.getElementById('c-cache-pct').textContent = `${cp}% of input`;
+}
+
+function renderUsageChart(rows) {
+  mkChart('ch-usage','line',{
+    labels: rows.map(r=>r.day.slice(5)),
+    datasets:[{
+      label:'Input tokens', data:rows.map(r=>r.input_tokens||0),
+      borderColor:C.accent, backgroundColor:'rgba(108,99,255,.08)',
+      fill:true, tension:.4, pointRadius:3,
+    }],
+  });
+}
+
+function renderModelDonut(models) {
+  if (!models.length) return;
+  mkChart('ch-model','doughnut',{
+    labels: models.map(m=>m.model),
+    datasets:[{
+      data: models.map(m=>m.input_tokens||0),
+      backgroundColor: PALETTE.slice(0,models.length), borderWidth:0,
+    }],
+  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
+}
+
+function renderSavingsChart(rows) {
+  mkChart('ch-savings','bar',{
+    labels: rows.map(r=>r.day.slice(5)),
+    datasets:[
+      {label:'Sent',   data:rows.map(r=>r.input_tokens||0), backgroundColor:'rgba(108,99,255,.45)'},
+      {label:'Saved',  data:rows.map(r=>r.saved_tokens||0), backgroundColor:'rgba(0,212,170,.45)'},
+    ],
+  });
+}
+
+function renderCostChart(rows) {
+  mkChart('ch-cost','line',{
+    labels: rows.map(r=>r.day.slice(5)),
+    datasets:[{
+      label:'Cost (USD)', data:rows.map(r=>r.cost_usd||0),
+      borderColor:C.warn, backgroundColor:'rgba(245,166,35,.08)',
+      fill:true, tension:.4, pointRadius:3,
+    }],
+  },{scales:{
+    x:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10}}},
+    y:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10},callback:v=>`$${v.toFixed(3)}`}},
+  }});
+}
+
+function renderOverviewEvents(events) {
+  document.getElementById('c-events-count').textContent = `${events.length} events`;
+  const tb = document.getElementById('overview-events');
+  if (!events.length) {
+    tb.innerHTML = `<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:32px">
+      No API calls yet. Set <code style="color:var(--accent2)">ANTHROPIC_BASE_URL=http://localhost:${location.port||7474}</code> and use Claude.
+    </td></tr>`;
+    return;
+  }
+  tb.innerHTML = events.map(e => {
+    const saved = e.saved_tokens||0;
+    const savedBadge = saved>0
+      ? `<span class="badge badge-green">−${fmtN(saved)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    const cachedBadge = (e.cached_tokens||0)>0
+      ? `<span class="badge badge-blue">${fmtN(e.cached_tokens)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr>
+      <td style="color:var(--muted);white-space:nowrap">${(e.ts||'').slice(11,19)}</td>
+      <td><span class="badge badge-blue">${e.model||'—'}</span></td>
+      <td style="color:var(--muted)">${e.provider||'—'}</td>
+      <td>${fmtN(e.input_tokens)}</td>
+      <td>${fmtN(e.output_tokens)}</td>
+      <td>${savedBadge}</td>
+      <td>${cachedBadge}</td>
+      <td>${fmtCost(e.cost_usd)}</td>
+      <td style="color:var(--muted)">${e.latency_ms?e.latency_ms+'ms':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────────
+async function loadSessions() {
+  const d = parseInt(document.getElementById('session-period')?.value||'7');
+  const data = await api(`/skim/data/events?days=${d}&limit=500`);
+  _allSessions = data || [];
+  filterSessions();
+}
+
+function filterSessions() {
+  const q = (document.getElementById('session-search')?.value||'').toLowerCase();
+  const rows = _allSessions.filter(e =>
+    !q || (e.model||'').toLowerCase().includes(q) || (e.provider||'').toLowerCase().includes(q)
+  );
+  document.getElementById('session-count').textContent = `${rows.length} calls`;
+  const tb = document.getElementById('sessions-table');
+  if (!rows.length) {
+    tb.innerHTML = `<tr><td colspan="11" style="color:var(--muted);text-align:center;padding:32px">No sessions yet.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map((e,i) => {
+    const planBadge = e.plan === 'apikey'
+      ? '<span class="badge badge-green">API key</span>'
+      : e.plan === 'oauth'
+      ? '<span class="badge badge-blue">Pro/OAuth</span>'
+      : '<span class="badge badge-muted">—</span>';
+    const savedBadge = (e.saved_tokens||0)>0
+      ? `<span class="badge badge-green">−${fmtN(e.saved_tokens)}</span>` : '—';
+    return `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td style="white-space:nowrap;color:var(--muted)">${fmtTime(e.ts)}</td>
+      <td style="color:var(--muted)">${e.provider||'—'}</td>
+      <td><span class="badge badge-blue">${e.model||'—'}</span></td>
+      <td>${fmtN(e.input_tokens)}</td>
+      <td>${fmtN(e.output_tokens)}</td>
+      <td>${savedBadge}</td>
+      <td>${(e.cached_tokens||0)>0?fmtN(e.cached_tokens):'—'}</td>
+      <td>${fmtCost(e.cost_usd)}</td>
+      <td style="color:var(--muted)">${e.latency_ms?e.latency_ms+'ms':'—'}</td>
+      <td>${planBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Usage ──────────────────────────────────────────────────────────────────
+async function loadUsage() {
+  const hd = parseInt(document.getElementById('hour-period')?.value||'7');
+  const [hourly, daily] = await Promise.all([
+    api(`/skim/data/hourly?days=${hd}`),
+    api(`/skim/data/daily?days=${_days}`),
+  ]);
+  if (hourly) {
+    mkChart('ch-hourly','bar',{
+      labels: hourly.map(r=>r.hour.slice(8)+'h'),
+      datasets:[{
+        label:'Tokens',data:hourly.map(r=>r.input_tokens||0),
+        backgroundColor:C.accent+'99',
+      }],
+    });
+    mkChart('ch-daily-calls','bar',{
+      labels: (daily||[]).map(r=>r.day.slice(5)),
+      datasets:[{
+        label:'API calls',data:(daily||[]).map(r=>r.calls||0),
+        backgroundColor:C.green+'99',
+      }],
+    });
+  }
+  if (daily) {
+    const tb = document.getElementById('usage-table');
+    tb.innerHTML = [...daily].reverse().map(r => {
+      const sp = r.input_tokens ? ((r.saved_tokens||0)/r.input_tokens*100).toFixed(1) : 0;
+      const cp = r.input_tokens ? ((r.cached_tokens||0)/r.input_tokens*100).toFixed(1) : 0;
+      return `<tr>
+        <td>${r.day}</td>
+        <td>${r.calls}</td>
+        <td>${fmtN(r.input_tokens)}</td>
+        <td>${fmtN(r.saved_tokens)}</td>
+        <td>${fmtN(r.cached_tokens||0)}</td>
+        <td>${fmtCost(r.cost_usd)}</td>
+        <td><span class="badge ${sp>30?'badge-green':'badge-warn'}">${sp}%</span></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">No data.</td></tr>`;
+  }
+}
+
+// ── Models ─────────────────────────────────────────────────────────────────
+async function loadModels() {
+  const data = await api(`/skim/data/models?days=${_days}`);
+  if (!data) return;
+  mkChart('ch-model-dist','doughnut',{
+    labels: data.map(m=>m.model),
+    datasets:[{
+      data:data.map(m=>m.input_tokens||0),
+      backgroundColor:PALETTE.slice(0,data.length), borderWidth:0,
+    }],
+  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
+  mkChart('ch-model-cost','doughnut',{
+    labels: data.map(m=>m.model),
+    datasets:[{
+      data:data.map(m=>m.cost_usd||0),
+      backgroundColor:PALETTE.slice(0,data.length), borderWidth:0,
+    }],
+  },{plugins:{legend:{position:'right',labels:{color:C.text,font:{size:11},boxWidth:10}}}});
+
+  const tb = document.getElementById('models-table');
+  if (!data.length) {
+    tb.innerHTML=`<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:24px">No model data yet.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = data.map(m => {
+    const costPerK = m.input_tokens ? (m.cost_usd/m.input_tokens*1000).toFixed(4) : '0';
+    const cacheCls = m.cache_hit_pct>50?'badge-green':m.cache_hit_pct>20?'badge-warn':'badge-red';
+    const wasteCls = m.waste_pct>30?'badge-red':m.waste_pct>10?'badge-warn':'badge-green';
+    return `<tr>
+      <td><strong>${m.model}</strong></td>
+      <td style="color:var(--muted)">${m.provider||'—'}</td>
+      <td>${m.calls}</td>
+      <td>${fmtN(m.input_tokens)}</td>
+      <td>${fmtN(m.output_tokens)}</td>
+      <td>${fmtCost(m.cost_usd)}</td>
+      <td style="color:var(--muted)">$${costPerK}/k</td>
+      <td><span class="badge ${cacheCls}">${m.cache_hit_pct}%</span></td>
+      <td><span class="badge ${wasteCls}">${m.waste_pct}%</span></td>
+      <td style="color:var(--muted)">${m.avg_latency_ms?m.avg_latency_ms+'ms':'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Savings ────────────────────────────────────────────────────────────────
+async function loadSavings() {
+  const [sum, daily, models] = await Promise.all([
+    api(`/skim/data/summary?days=${_days}`),
+    api(`/skim/data/daily?days=${_days}`),
+    api(`/skim/data/models?days=${_days}`),
+  ]);
+  if (sum) {
+    document.getElementById('sv-tokens').textContent  = fmtN(sum.total_saved);
+    // Estimate $ saved: saved_tokens × claude-sonnet rate $3/1M
+    const savedUsd = (sum.total_saved||0) * 3 / 1_000_000;
+    document.getElementById('sv-usd').textContent     = fmtCost(savedUsd);
+    const cacheUsd = (sum.total_cached||0) * 3 / 1_000_000;
+    document.getElementById('sv-cache-usd').textContent = fmtCost(cacheUsd);
+  }
+  if (daily) {
+    // Cumulative savings
+    let cum = 0;
+    const cumData = daily.map(r => { cum += (r.saved_tokens||0); return cum; });
+    mkChart('ch-cumulative','line',{
+      labels: daily.map(r=>r.day.slice(5)),
+      datasets:[{
+        label:'Cumulative tokens saved',data:cumData,
+        borderColor:C.green,backgroundColor:'rgba(0,212,170,.08)',
+        fill:true,tension:.4,pointRadius:3,
+      }],
+    });
+    // Save rate
+    mkChart('ch-save-rate','bar',{
+      labels: daily.map(r=>r.day.slice(5)),
+      datasets:[{
+        label:'Save rate (%)',
+        data:daily.map(r=>r.input_tokens?((r.saved_tokens||0)/r.input_tokens*100).toFixed(1):0),
+        backgroundColor:C.green+'88',
+      }],
+    },{scales:{
+      x:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10}}},
+      y:{grid:{color:C.grid},ticks:{color:C.text,font:{size:10},callback:v=>v+'%'}},
+    }});
+    // Breakdown
+    mkChart('ch-breakdown','bar',{
+      labels: daily.map(r=>r.day.slice(5)),
+      datasets:[
+        {label:'Sent',   data:daily.map(r=>r.input_tokens||0), backgroundColor:C.accent+'66'},
+        {label:'Saved',  data:daily.map(r=>r.saved_tokens||0), backgroundColor:C.green+'88'},
+        {label:'Cached', data:daily.map(r=>r.cached_tokens||0), backgroundColor:C.blue+'88'},
+      ],
+    });
+  }
+  if (models) {
+    mkChart('ch-model-save','bar',{
+      labels: models.map(m=>m.model),
+      datasets:[
+        {label:'Saved',  data:models.map(m=>m.saved_tokens||0),  backgroundColor:C.green+'88'},
+        {label:'Cached', data:models.map(m=>m.cached_tokens||0), backgroundColor:C.blue+'88'},
+      ],
+    },{indexAxis:'y'});
+  }
+}
+
+// ── Top-level ──────────────────────────────────────────────────────────────
+function reload() {
+  _days = parseInt(document.getElementById('period').value);
+  const active = document.querySelector('.content.active');
+  if (!active) return;
+  const name = active.id.replace('page-','');
+  if (name==='overview') loadOverview();
+  if (name==='sessions') loadSessions();
+  if (name==='usage')    loadUsage();
+  if (name==='models')   loadModels();
+  if (name==='savings')  loadSavings();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('proxy-url').textContent = window.location.host;
+connectSSE();
+loadOverview();
+</script>
+</body>
+</html>

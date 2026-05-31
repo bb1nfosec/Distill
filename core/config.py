@@ -63,15 +63,23 @@ def _parse(text: str) -> dict:
 
 def load(project_path: Path = None) -> dict:
     cfg = dict(_DEFAULTS)
-    for src in [Path.home() / ".skimrc", *(
-        [project_path / n for n in _NAMES] if project_path else []
-    )]:
-        if src.exists():
-            try:
-                cfg.update(_parse(src.read_text(encoding="utf-8")))
-                break  # use the first project-level file found
-            except Exception:
-                pass
+    # User-level config (lowest priority — loaded first, overridden by project)
+    user_cfg = Path.home() / ".skimrc"
+    if user_cfg.exists():
+        try:
+            cfg.update(_parse(user_cfg.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+    # Project-level config (highest priority — first match wins)
+    if project_path:
+        for name in _NAMES:
+            src = project_path / name
+            if src.exists():
+                try:
+                    cfg.update(_parse(src.read_text(encoding="utf-8")))
+                except Exception:
+                    pass
+                break
     return cfg
 
 

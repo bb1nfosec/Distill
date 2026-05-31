@@ -45,7 +45,7 @@ def scan_tokens(
     price_per_m = PRICING.get(model, 2.50)
 
     lines = [
-        f"distill scan — {path}",
+        f"skim scan — {path}",
         f"Model     : {model}  (${price_per_m:.2f}/1M tokens)",
         f"Files     : {len(files)}",
         f"Tokens    : {total_tokens:,}  ({pct:.1f}% of {ctx_limit // 1000}k ctx)",

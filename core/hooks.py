@@ -60,6 +60,8 @@ def install(project: Path, max_pct: float = 30.0, fail_on_waste: bool = False) -
         existing = hook.read_text(encoding="utf-8")
         if _MARKER in existing:
             hook.write_text(script, encoding="utf-8")
+            m = hook.stat().st_mode
+            hook.chmod(m | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             print(f"  Updated pre-commit hook: {hook}")
         else:
             print(f"  Pre-commit hook already exists at {hook}")

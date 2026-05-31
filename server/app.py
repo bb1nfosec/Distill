@@ -18,7 +18,9 @@ Environment variables:
 
 import json
 import os
+import queue
 import sys
+import threading
 from pathlib import Path
 from functools import wraps
 
@@ -35,8 +37,8 @@ except ImportError:
 from server.db import (
     connect, init_schema, create_user, get_user_by_email, get_user_by_id,
     create_api_key, get_user_for_key, insert_event,
-    stats_summary, stats_by_day, stats_by_user, stats_by_model, query_events,
-    get_insights,
+    stats_summary, stats_by_day, stats_by_user, stats_by_model, stats_by_hour,
+    query_events, get_insights,
 )
 from server.auth import (
     issue_jwt, verify_jwt, hash_password, verify_password,
@@ -44,6 +46,25 @@ from server.auth import (
 )
 
 _STATIC = Path(__file__).parent / "static"
+
+# ── SSE broadcast for server dashboard ───────────────────────────────────────
+_srv_sse_clients: list[queue.Queue] = []
+_srv_sse_lock    = threading.Lock()
+
+def _srv_sse_broadcast(event: dict) -> None:
+    data = f"data: {json.dumps({**event, 'type': 'event'})}\n\n".encode()
+    with _srv_sse_lock:
+        dead = []
+        for q in _srv_sse_clients:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            try:
+                _srv_sse_clients.remove(q)
+            except ValueError:
+                pass
 
 _PRICING = {
     "claude": 3.00, "claude-sonnet": 3.00, "claude-haiku": 0.80, "claude-opus": 15.00,
@@ -60,15 +81,35 @@ def create_app(db_path: Path = None) -> "Flask":
     app = Flask(__name__, static_folder=str(_STATIC), static_url_path="/static")
     app.secret_key = os.environ.get("SKIM_JWT_SECRET", os.urandom(32).hex())
 
-    db = connect(db_path)
-    init_schema(db)
+    # Per-request connection via Flask g — new connection each request,
+    # closed on teardown. WAL mode serialises concurrent writes safely.
+    def get_db():
+        from flask import g as _g
+        if "db" not in _g:
+            _g.db = connect(db_path)
+        return _g.db
+
+    @app.teardown_appcontext
+    def close_db(exc=None):
+        from flask import g as _g
+        db_conn = _g.pop("db", None)
+        if db_conn:
+            db_conn.close()
+
+    # Initialise schema on first connection
+    _init_conn = connect(db_path)
+    init_schema(_init_conn)
+    _init_conn.close()
 
     # Auto-create admin on first run
     admin_email = os.environ.get("SKIM_ADMIN_EMAIL", "")
-    if admin_email and not get_user_by_email(db, admin_email):
-        pw = os.environ.get("SKIM_ADMIN_PASSWORD", "changeme")
-        create_user(db, admin_email, name="Admin", role="admin",
-                    password_hash=hash_password(pw))
+    if admin_email:
+        _setup_conn = connect(db_path)
+        if not get_user_by_email(_setup_conn, admin_email):
+            pw = os.environ.get("SKIM_ADMIN_PASSWORD", "changeme")
+            create_user(_setup_conn, admin_email, name="Admin", role="admin",
+                        password_hash=hash_password(pw))
+        _setup_conn.close()
 
     # ── Auth helpers ──────────────────────────────────────────────────────
 
@@ -77,10 +118,10 @@ def create_app(db_path: Path = None) -> "Flask":
         if auth.startswith("Bearer "):
             token = auth[7:]
             if token.startswith("sk-skim-"):
-                return get_user_for_key(db, token)
+                return get_user_for_key(get_db(), token)
             claims = verify_jwt(token)
             if claims:
-                return get_user_by_id(db, claims.get("sub", ""))
+                return get_user_by_id(get_db(), claims.get("sub", ""))
         return None
 
     def require_auth(f):
@@ -131,14 +172,14 @@ def create_app(db_path: Path = None) -> "Flask":
         # LDAP first
         ldap_user = ldap_authenticate(email.split("@")[0], pw)
         if ldap_user:
-            user = get_user_by_email(db, ldap_user["email"])
+            user = get_user_by_email(get_db(), ldap_user["email"])
             if not user:
-                user = create_user(db, ldap_user["email"], name=ldap_user["name"])
+                user = create_user(get_db(), ldap_user["email"], name=ldap_user["name"])
             token = issue_jwt({"sub": user["id"], "email": user["email"], "role": user["role"]})
             return jsonify({"token": token, "user": _safe_user(user)})
 
         # Local password
-        user = get_user_by_email(db, email)
+        user = get_user_by_email(get_db(), email)
         if not user or not verify_password(pw, user.get("password_hash", "")):
             return jsonify({"error": "Invalid credentials"}), 401
 
@@ -156,10 +197,10 @@ def create_app(db_path: Path = None) -> "Flask":
         if request.method == "POST":
             data  = request.get_json(silent=True) or {}
             label = data.get("label", "")
-            key   = create_api_key(db, request.user["id"], label)
+            key   = create_api_key(get_db(), request.user["id"], label)
             return jsonify({"key": key, "label": label}), 201
         # GET — list keys (masked)
-        rows = db.execute(
+        rows = get_db().execute(
             "SELECT key, label, created_at, last_used FROM api_keys WHERE user_id=?",
             (request.user["id"],)
         ).fetchall()
@@ -176,14 +217,14 @@ def create_app(db_path: Path = None) -> "Flask":
     def stats_summary_route():
         days = int(request.args.get("days", 7))
         uid  = None if request.user["role"] == "admin" else request.user["id"]
-        data = stats_summary(db, days, user_id=uid)
+        data = stats_summary(get_db(), days, user_id=uid)
         return jsonify(data)
 
     @app.route("/api/v1/stats/daily")
     @require_auth
     def stats_daily():
         days = int(request.args.get("days", 30))
-        return jsonify({"data": stats_by_day(db, days)})
+        return jsonify({"data": stats_by_day(get_db(), days)})
 
     @app.route("/api/v1/stats/by-user")
     @require_auth
@@ -191,13 +232,19 @@ def create_app(db_path: Path = None) -> "Flask":
         if request.user["role"] != "admin":
             return jsonify({"error": "Admin only"}), 403
         days = int(request.args.get("days", 30))
-        return jsonify({"data": stats_by_user(db, days)})
+        return jsonify({"data": stats_by_user(get_db(), days)})
 
     @app.route("/api/v1/stats/by-model")
     @require_auth
     def stats_by_model_route():
         days = int(request.args.get("days", 30))
-        return jsonify({"data": stats_by_model(db, days)})
+        return jsonify({"data": stats_by_model(get_db(), days)})
+
+    @app.route("/api/v1/stats/hourly")
+    @require_auth
+    def stats_hourly_route():
+        days = int(request.args.get("days", 7))
+        return jsonify({"data": stats_by_hour(get_db(), days)})
 
     @app.route("/api/v1/insights")
     @require_auth
@@ -205,7 +252,7 @@ def create_app(db_path: Path = None) -> "Flask":
         if request.user["role"] != "admin":
             return jsonify({"error": "Admin only"}), 403
         days = int(request.args.get("days", 30))
-        return jsonify({"insights": get_insights(db, days), "days": days})
+        return jsonify({"insights": get_insights(get_db(), days), "days": days})
 
     # ── Events ingestion (from proxy) ─────────────────────────────────────
 
@@ -218,8 +265,41 @@ def create_app(db_path: Path = None) -> "Flask":
         inp_tok  = data.get("input_tokens", 0)
         rate     = _PRICING.get(model, 2.50)
         data.setdefault("cost_usd", inp_tok / 1_000_000 * rate)
-        eid = insert_event(db, data)
+        eid = insert_event(get_db(), data)
+        _srv_sse_broadcast({**data, "id": eid})
         return jsonify({"id": eid}), 201
+
+    @app.route("/skim/stream")
+    @require_auth
+    def sse_stream():
+        from flask import Response, stream_with_context
+        q: queue.Queue = queue.Queue(maxsize=50)
+        with _srv_sse_lock:
+            _srv_sse_clients.append(q)
+
+        def generate():
+            try:
+                yield ":ok\n\n"
+                while True:
+                    try:
+                        data = q.get(timeout=25)
+                        yield data.decode()
+                    except queue.Empty:
+                        yield ":heartbeat\n\n"
+            except GeneratorExit:
+                pass
+            finally:
+                with _srv_sse_lock:
+                    try:
+                        _srv_sse_clients.remove(q)
+                    except ValueError:
+                        pass
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.route("/api/v1/events")
     @require_auth
@@ -228,7 +308,7 @@ def create_app(db_path: Path = None) -> "Flask":
         limit  = min(int(request.args.get("limit", 100)), 500)
         offset = int(request.args.get("offset", 0))
         uid    = None if request.user["role"] == "admin" else request.user["id"]
-        events = query_events(db, days=days, user_id=uid, limit=limit, offset=offset)
+        events = query_events(get_db(), days=days, user_id=uid, limit=limit, offset=offset)
         return jsonify({"events": events, "count": len(events)})
 
     # ── Admin API ─────────────────────────────────────────────────────────
@@ -237,7 +317,7 @@ def create_app(db_path: Path = None) -> "Flask":
     @require_admin
     def admin_list_users():
         from server.db import list_users
-        users = list_users(db)
+        users = list_users(get_db())
         return jsonify({"users": [_safe_user(u) for u in users]})
 
     @app.route("/api/v1/admin/users", methods=["POST"])
@@ -248,7 +328,7 @@ def create_app(db_path: Path = None) -> "Flask":
             return jsonify({"error": "email required"}), 400
         pw = data.get("password", "")
         user = create_user(
-            db,
+            get_db(),
             email=data["email"],
             name=data.get("name", ""),
             team=data.get("team", ""),
@@ -318,7 +398,35 @@ def main():
     print(f"  {BOLD}│{NC}  {DIM}{footer}{NC}{' '*(W-2-len(footer))}{BOLD}│{NC}")
     print(f"  {BOLD}└{'─'*W}┘{NC}\n")
 
-    app.run(host=args.host, port=args.port, debug=False)
+    # Prefer gunicorn for production; fall back to Flask dev server with warning
+    try:
+        from gunicorn.app.base import BaseApplication
+
+        class _GApp(BaseApplication):
+            def __init__(self, application, options=None):
+                self.application = application
+                self.options = options or {}
+                super().__init__()
+            def load_config(self):
+                for k, v in self.options.items():
+                    self.cfg.set(k, v)
+            def load(self):
+                return self.application
+
+        _GApp(app, {
+            "bind":    f"{args.host}:{args.port}",
+            "workers": 4,
+            "worker_class": "sync",
+            "timeout": 120,
+        }).run()
+    except ImportError:
+        print(
+            f"\n  {YELLOW}⚠  Flask dev server — NOT for production.{NC}\n"
+            f"  For production: pip install gunicorn && "
+            f"gunicorn 'server.app:create_app()' -b {args.host}:{args.port} -w 4\n",
+            file=sys.stderr,
+        )
+        app.run(host=args.host, port=args.port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":

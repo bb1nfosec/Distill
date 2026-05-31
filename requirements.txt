@@ -1,18 +1,26 @@
-# TokenWise — Python dependencies
-# Core tools work with stdlib only (no hard deps)
-# Install optional packages for full functionality
+# skim-llm — Python dependencies
+# Core proxy + scanner work with stdlib only (zero hard deps).
+# Install optional groups for full functionality.
 
 # Accurate token counting (strongly recommended)
 tiktoken>=0.7.0
 
-# Claude support
+# LLM provider SDKs (install what you use)
 anthropic>=0.40.0
-
-# OpenAI / OpenAI-compatible API support
 openai>=1.50.0
-
-# Google Gemini support
 google-generativeai>=0.8.0
+
+# Web dashboard (skim server)
+flask>=3.0.0
+passlib>=1.7.4
+
+# Enterprise auth — optional
+# authlib>=1.3.0   # OIDC/OAuth2 SSO
+# ldap3>=2.9.0     # LDAP / Active Directory
+# gunicorn>=21.0   # Production WSGI server (recommended over Flask dev server)
+
+# MCP server integration
+# mcp>=1.0.0
 
 # Dev / testing
 pytest>=8.0.0

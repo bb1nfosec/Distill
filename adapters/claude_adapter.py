@@ -150,12 +150,13 @@ class ClaudeAdapter(BaseLLMAdapter):
                 content = self.load_file_lazy(fp, max_lines=200)
                 content_parts.append(content)
 
-        # Fresh subagent — no history
+        # Fresh subagent — no history; forward api_key so explicit keys aren't lost
         sub = ClaudeAdapter(
-            model="claude-haiku-4-5-20251001",  # Use cheaper model for research
+            model="claude-haiku-4-5-20251001",
             system_prompt=subagent_system,
             max_tokens=1024,
             enable_caching=False,
+            api_key=self.client.api_key,
         )
         result = sub.chat("\n".join(content_parts))
         

@@ -168,18 +168,20 @@ def cmd_proxy(argv):
     from core.token_counter import CONTEXT_LIMITS
     p = argparse.ArgumentParser(prog="skim proxy",
         description="Runtime token interceptor — set ANTHROPIC_BASE_URL=http://localhost:PORT")
-    p.add_argument("--port",      "-p", type=int, default=7474)
-    p.add_argument("--host",            default="127.0.0.1")
-    p.add_argument("--path",            default=".", help="Project root for .llmignore rules")
-    p.add_argument("--model",     "-m", default="claude")
-    p.add_argument("--no-filter",       action="store_true",
+    p.add_argument("--port",       "-p", type=int, default=7474)
+    p.add_argument("--host",             default="127.0.0.1")
+    p.add_argument("--path",             default=".", help="Project root for .llmignore rules")
+    p.add_argument("--model",      "-m", default="claude")
+    p.add_argument("--no-filter",        action="store_true",
                    help="Disable waste filtering (passthrough only)")
-    p.add_argument("--no-cache",        action="store_true",
+    p.add_argument("--no-cache",         action="store_true",
                    help="Disable automatic prompt caching injection")
+    p.add_argument("--no-browser",       action="store_true",
+                   help="Do not auto-open the local dashboard in a browser")
     args = p.parse_args(argv)
     limit = CONTEXT_LIMITS.get(args.model, 200_000)
     serve(args.port, args.host, Path(args.path).resolve(), limit, args.model,
-          args.no_filter, args.no_cache)
+          args.no_filter, args.no_cache, args.no_browser)
     return 0
 
 

@@ -103,25 +103,27 @@ def run_fix(
     new_lines.append("# Added by skim fix")
     new_lines.extend(added_rules)
 
-    # Write temporarily (even for dry-run) so after-scan is accurate
+    # Write temporarily (even for dry-run) so after-scan is accurate.
+    # try/finally guarantees restore even if scan_directory raises.
     ig_path          = path / ".llmignore"
     original_content = ig_path.read_text(encoding='utf-8') if ig_path.exists() else None
     _write_llmignore(path, new_lines)
 
-    after        = scan_directory(path, model, respect_llmignore=True)
-    after_tokens = sum(f["tokens"] for f in after)
-    after_cost   = sum(f["cost_usd"] for f in after)
+    try:
+        after        = scan_directory(path, model, respect_llmignore=True)
+        after_tokens = sum(f["tokens"] for f in after)
+        after_cost   = sum(f["cost_usd"] for f in after)
+    finally:
+        if dry_run:
+            if original_content is None:
+                ig_path.unlink(missing_ok=True)
+            else:
+                ig_path.write_text(original_content, encoding='utf-8')
+
     after_pct    = after_tokens / ctx_limit * 100
     saved_tokens = before_tokens - after_tokens
     saved_cost   = before_cost - after_cost
     saved_pct    = (saved_tokens / before_tokens * 100) if before_tokens else 0
-
-    # Restore if dry-run
-    if dry_run:
-        if original_content is None:
-            ig_path.unlink(missing_ok=True)
-        else:
-            ig_path.write_text(original_content, encoding='utf-8')
 
     print(f"\n  {'─'*54}")
     if dry_run:
