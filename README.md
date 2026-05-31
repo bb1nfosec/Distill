@@ -1,393 +1,448 @@
 <div align="center">
 
-# skim
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://img.shields.io/badge/skim-runtime%20token%20intelligence-6c63ff?style=for-the-badge&labelColor=0a0c10">
+  <img alt="skim" src="https://img.shields.io/badge/skim-runtime%20token%20intelligence-6c63ff?style=for-the-badge&labelColor=0a0c10">
+</picture>
 
-**Runtime token intelligence for Claude Code, Cursor, and any LLM tool.**
+# `skim`
 
-[![PyPI](https://img.shields.io/pypi/v/skim-llm?color=6c63ff&logo=pypi&logoColor=white)](https://pypi.org/project/skim-llm/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/skim-llm?color=6c63ff)](https://pypi.org/project/skim-llm/)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-6c63ff?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-00d4aa)](LICENSE)
-[![Zero hard deps](https://img.shields.io/badge/core-zero%20hard%20deps-f5a623)](pyproject.toml)
+### Stop paying for tokens you never meant to send.
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Dashboard](#dashboard) · [Enterprise](#enterprise) · [CLI](#cli-reference) · [Docs](docs/) · [Live Demo](https://demo-mu-ten-60.vercel.app)
+The runtime layer that sits between your AI tools and the LLM API —
+**stripping waste, injecting caching, and showing you exactly where every token goes.**
+
+<br/>
+
+[![PyPI](https://img.shields.io/pypi/v/skim-llm?color=6c63ff&label=pypi&logo=pypi&logoColor=white&style=flat-square)](https://pypi.org/project/skim-llm/)
+[![Downloads](https://img.shields.io/pypi/dm/skim-llm?color=6c63ff&style=flat-square)](https://pypi.org/project/skim-llm/)
+[![Python](https://img.shields.io/badge/python-3.10+-6c63ff?logo=python&logoColor=white&style=flat-square)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-00d4aa?style=flat-square)](LICENSE)
+[![Zero deps](https://img.shields.io/badge/core-zero%20hard%20deps-f5a623?style=flat-square)](pyproject.toml)
+
+<br/>
+
+[**⚡ Quickstart**](#-quickstart) &nbsp;·&nbsp;
+[**🔍 How it works**](#-how-it-works) &nbsp;·&nbsp;
+[**📊 Dashboard**](#-dashboard) &nbsp;·&nbsp;
+[**🏢 Enterprise**](#-enterprise) &nbsp;·&nbsp;
+[**⌨️ CLI**](#️-cli-reference) &nbsp;·&nbsp;
+[**📚 Docs**](docs/) &nbsp;·&nbsp;
+[**▶️ Live Demo**](https://demo-mu-ten-60.vercel.app)
 
 </div>
 
----
+<br/>
 
-LLM tools waste tokens invisibly. Claude Code reads `package-lock.json` (122k tokens, $0.37) before answering about a 200-line file. History compounds. Your context window fills silently, quality degrades, and you're paying for noise.
+> [!NOTE]
+> **One env var. Zero code changes.** Claude Code reads a `package-lock.json` — 122k tokens, $0.37 — just to answer a question about a 200-line file. History compounds. Your context window fills silently and quality degrades while you fly blind. skim fixes this in the API call path, in real time.
 
-**skim sits in the API call path and fixes this in real-time — one env var, no code changes.**
+<br/>
 
+<div align="center">
+
+```mermaid
+flowchart LR
+    A["🤖 Claude Code<br/>Cursor · your app"] -->|ANTHROPIC_BASE_URL| B
+
+    subgraph B ["⚡ skim proxy"]
+        direction TB
+        B1["✂️ strip lock files<br/>& build artifacts"]
+        B2["◈ inject prompt caching<br/>50–90% cheaper"]
+        B3["🛡️ enforce budgets<br/>hard 429 block"]
+        B4["📊 live dashboard<br/>+ local SQLite"]
+    end
+
+    B --> C["☁️ Anthropic<br/>OpenAI · Gemini"]
+
+    style A fill:#161920,stroke:#6c63ff,color:#e4e6f0
+    style B fill:#0d0f14,stroke:#6c63ff,color:#6c63ff
+    style C fill:#161920,stroke:#00d4aa,color:#e4e6f0
+    style B1 fill:#161920,stroke:#252a3a,color:#e4e6f0
+    style B2 fill:#161920,stroke:#252a3a,color:#e4e6f0
+    style B3 fill:#161920,stroke:#252a3a,color:#e4e6f0
+    style B4 fill:#161920,stroke:#252a3a,color:#e4e6f0
 ```
-Claude Code / Cursor / your app
-         │
-         ▼
-    skim proxy                       ← set ANTHROPIC_BASE_URL=http://localhost:7474
-    ├─ strips lock files & build artifacts from tool outputs (real-time)
-    ├─ auto-injects prompt caching   (50–90% cost reduction on repeated context)
-    ├─ enforces token/cost budgets   (hard block on 429, enterprise-grade)
-    ├─ serves local dashboard        (opens in browser automatically)
-    └─ streams live events to team dashboard (optional)
-         │
-         ▼
-  Anthropic / OpenAI / Gemini API
-```
 
----
+</div>
 
-## Quickstart
+<br/>
+
+## ⚡ Quickstart
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**1. Install**
 
 ```bash
 pip install skim-llm
+```
 
-# Start — browser opens automatically to your dashboard
+**2. Start the proxy**
+
+```bash
 skim proxy
+```
 
-# Point Claude Code (or any LLM tool) at it
+Browser opens automatically to your live dashboard.
+
+**3. Point your tool at it**
+
+```bash
 export ANTHROPIC_BASE_URL=http://localhost:7474
 ```
 
-That's it. Every API call now goes through skim. Open `http://localhost:7474/dashboard` to see live token usage, cost, savings, and cache hit rate.
+</td>
+<td width="50%" valign="top">
 
-**Works with all plans — no API key required for Claude Pro/Max users.** skim detects your auth type automatically (`x-api-key` for API plans, `Authorization: Bearer` for Pro/OAuth plans) and routes accordingly.
-
----
-
-## How it works
-
-### 1 · Waste filtering
-
-Detects lock files, build artifacts, and generated code inside `tool_result` blocks and strips them before they enter context. A `package-lock.json` read becomes a 12-token note instead of 122k tokens.
-
-Detected automatically: `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `Cargo.lock`, `poetry.lock`, `composer.lock` — and anything in your `.llmignore`.
-
-### 2 · Prompt caching injection (Anthropic only)
-
-Wraps your system prompt and large context blocks with `cache_control: {"type": "ephemeral"}` automatically. First call: Anthropic caches it (25% write fee once). Every subsequent call: free. CLAUDE.md and project context load at zero cost on calls 2+.
-
-> Skipped for Pro/OAuth plan users — Pro plan manages its own caching layer.
-
-### 3 · Live dashboard
-
-`skim proxy` opens a browser tab automatically. The local dashboard requires no login, no server setup, and persists all events to `~/.skim/events.db`. Five pages:
-
-| Page | Shows |
-|------|-------|
-| Overview | Token usage over time, cost, savings, cache hits, recent calls |
-| Sessions | Full call log with model, latency, plan type, cost per call |
-| Usage | Hourly activity heatmap, daily breakdown table |
-| Models | Side-by-side comparison — cost/1k tokens, cache hit %, waste % |
-| Savings | Cumulative savings, save rate, ROI of using skim |
-
-### 4 · Plan detection
+**That's it.** Every call now flows through skim.
 
 ```
-_auth_type() → ("apikey", key)    API plan users   → full features
-             → ("oauth",  token)  Pro/Max users    → filtering + tracking
-             → ("", "")           No auth          → 401
+┌────────────────────────────────────┐
+│  skim v0.5.0  — runtime token proxy │
+├────────────────────────────────────┤
+│  listening  localhost:7474          │
+│  dashboard  localhost:7474/dashboard│
+│  filtering  ✓ on                    │
+│  caching    ✓ on                    │
+├────────────────────────────────────┤
+│  ⠋ LIVE  waiting for calls...       │
+└────────────────────────────────────┘
 ```
 
-One method owns this logic. Extending for new plan types (enterprise SSO, team tokens) is one `elif`.
+</td>
+</tr>
+</table>
 
-### 5 · Budget enforcement (enterprise)
+> [!TIP]
+> **No API key? No problem.** skim auto-detects your plan — `x-api-key` for API users, `Authorization: Bearer` for **Claude Pro / Max** users — and routes each accordingly. Pro users get full waste filtering and tracking out of the box.
 
-When `SKIM_SERVER_URL` is set, the proxy calls `/api/v1/budget/check` before every request. If the user or their team has exceeded their token/cost budget, the proxy returns `429` immediately — no call is forwarded. Fails open (200ms timeout) so server downtime never blocks work.
+<br/>
 
----
+## 🔍 How it works
 
-## Dashboard
+<table>
+<tr>
+<td width="33%" valign="top" align="center">
 
-### Local (solo — no setup)
+### ✂️
+**Waste filtering**
+
+Detects lock files, build artifacts & generated code inside `tool_result` blocks and strips them before they hit your context.
+
+`package-lock.json` → a 12-token note instead of 122k tokens.
+
+</td>
+<td width="33%" valign="top" align="center">
+
+### ◈
+**Caching injection**
+
+Wraps your system prompt + large context with `cache_control` automatically.
+
+First call caches it. Every call after is **free**. CLAUDE.md loads at zero cost on calls 2+.
+
+</td>
+<td width="33%" valign="top" align="center">
+
+### 📊
+**Live dashboard**
+
+Opens in your browser on start. No login, no setup. Persists to `~/.skim/events.db`.
+
+Real-time SSE updates — watch tokens & cost as they happen.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Auto-detected waste signatures</b></summary>
+
+<br/>
+
+| File | Detected by |
+|------|-------------|
+| `package-lock.json` | `"lockfileVersion"` + `"resolved": "https://"` |
+| `yarn.lock` | `# yarn lockfile v1` + `resolved` |
+| `pnpm-lock.yaml` | `lockfileVersion:` + `resolution:` |
+| `Cargo.lock` | `@generated` + `[[package]]` |
+| `poetry.lock` | `@generated` + `[[package]]` |
+| `composer.lock` | `"content-hash":` + `"packages":` |
+
+Plus anything in your project's `.llmignore`. Stripped blocks are replaced with a one-line note showing what was removed and how to disable it.
+
+</details>
+
+<details>
+<summary><b>How plan detection works</b></summary>
+
+<br/>
+
+One method, `_auth_type()`, owns all routing logic:
+
+```python
+_auth_type() → ("apikey", key)    # API plan      → filtering + caching + tracking
+             → ("oauth",  token)  # Pro/Max plan  → filtering + tracking (no cache injection)
+             → ("", "")           # no auth       → 401
+```
+
+Adding a new plan type (enterprise SSO, team tokens) is a single `elif`. Caching injection is skipped for Pro/OAuth because the Pro plan manages its own cache layer.
+
+</details>
+
+<br/>
+
+## 📊 Dashboard
+
+Five fully-built pages. Dark theme, live charts, real-time SSE updates — no refresh button needed.
+
+<div align="center">
+
+| 🟣 Overview | ⚡ Sessions | 📈 Usage | 🤖 Models | 💰 Savings |
+|:---:|:---:|:---:|:---:|:---:|
+| tokens, cost,<br/>savings, cache | full call log,<br/>searchable | hourly +<br/>daily charts | cost/1k,<br/>cache %, waste % | cumulative<br/>savings & ROI |
+
+</div>
 
 ```bash
-skim proxy          # browser opens to http://localhost:7474/dashboard
+skim proxy              # local dashboard, zero setup, opens in browser
 ```
 
-No login. No server. Data lives in `~/.skim/events.db`. Works for any plan.
+The local dashboard works for everyone — solo devs, Pro users, anyone. Data never leaves your machine unless you explicitly connect a team server.
 
-### Team (enterprise)
+<br/>
+
+## 🏢 Enterprise
+
+> [!IMPORTANT]
+> Everything below is **open-source and self-hosted** — same pip package, no paywall, no telemetry.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+#### 🛡️ Budget enforcement
+Hard-block calls that exceed token/cost limits. Proxy returns `429` before forwarding.
 
 ```bash
-pip install 'skim-llm[web]'
-
-SKIM_ADMIN_EMAIL=you@corp.com skim server --host 0.0.0.0 --port 7475
-# → open http://your-server:7475/dashboard
+skim admin budget set --owner-type team \
+  --owner-id engineering --usd 500 --period monthly
 ```
 
-Connect each developer's proxy:
+#### 🔔 Webhook alerts
+Slack (& Teams) or any HTTP endpoint on budget events.
 
 ```bash
-export SKIM_SERVER_URL=https://skim.corp.internal
-export SKIM_SERVER_TOKEN=sk-skim-...   # generate in Settings
+skim admin webhooks add --channel slack \
+  --url https://hooks.slack.com/...
 ```
 
-The team dashboard adds: multi-user auth, team leaderboard, org-level insights, budget management, webhook alerts, user invites, and a full audit log.
-
-**Auth options:** Local password · LDAP/AD (`SKIM_LDAP_*`) · Google/GitHub/Azure/Okta (`SKIM_OIDC_*`)
-
----
-
-## Enterprise
-
-skim v0.5.0 ships a full enterprise control plane. All features are in the open-source repo.
-
-### Budget enforcement
-
-Set hard spending limits per user, team, or globally. Proxy blocks requests that would exceed the limit.
+#### ✉️ User invites
+Self-registration via single-use links. No manual accounts.
 
 ```bash
-# Set a 1M token monthly budget for a user
-skim admin budget set --owner-type user --owner-id <user_id> --tokens 1000000 --period monthly
-
-# Set a $500/month cost budget for a team
-skim admin budget set --owner-type team --owner-id engineering --usd 500 --period monthly
+skim admin users invite --email new@corp.com \
+  --role user --team platform
 ```
 
-When the budget is hit, the proxy returns:
-```json
-{"error": {"type": "budget_exceeded", "message": "user token budget exceeded (103% used)"}}
-```
+</td>
+<td width="50%" valign="top">
 
-### Webhook alerts
+#### 🔑 Scoped API keys
+`ingest` · `read` · `admin` — with expiry dates and revocation.
 
-Get notified on Slack (or any HTTP endpoint) when teams approach or exceed budgets.
+#### 👥 RBAC
+`admin` · `team_admin` · `user` — enforced data isolation per role.
+
+#### 📋 Audit log
+Every sensitive action logged immutably. Queryable by action + date.
 
 ```bash
-# Slack (works with Teams connectors too)
-skim admin webhooks add \
-  --url https://hooks.slack.com/services/... \
-  --channel slack \
-  --events budget.warning,budget.exceeded
-
-# Generic HTTP with HMAC signature
-skim admin webhooks add --url https://your-system.example.com/hook
+skim admin audit --days 30 --action auth.login
 ```
 
-Payload on `budget.warning`:
-```json
-{
-  "event": "budget.warning",
-  "data": {"user": "dev@corp.com", "team": "engineering", "pct_used": 83.4, "budget_type": "team"},
-  "ts": "2026-05-31T14:23:01Z",
-  "sig": "sha256=..."
-}
-```
-
-### User invites
-
-No manual account creation. Admins generate invite links; users self-register.
+#### 📤 Data export
+CSV event logs + JSON summaries for accounting & BI.
 
 ```bash
-skim admin users invite --email new@corp.com --role user --team engineering
-# → https://skim.corp:7475/invite/abc123...  (7-day token, single-use)
-```
-
-### API key scopes
-
-Keys are scoped and can expire.
-
-| Scope | Can do |
-|-------|--------|
-| `ingest` | Push events from proxy (default) |
-| `read` | Read stats and dashboard API |
-| `admin` | Full access (only org admins can create) |
-
-```bash
-# Create a 90-day read-only key
-curl -X POST .../api/v1/auth/keys \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"label": "ci-reader", "scope": "read", "expires_days": 90}'
-```
-
-### RBAC
-
-Three roles: `admin` (org-wide), `team_admin` (own team only), `user` (own data only).
-
-### Audit log
-
-Every action is logged. Queryable via API or CLI.
-
-```bash
-skim admin audit --days 30
-#  Timestamp              User                         Action                 Detail
-#  2026-05-31 14:23:01    admin@corp.com               auth.login
-#  2026-05-31 14:24:10    admin@corp.com               budget.created         user:abc123
-#  2026-05-31 14:31:55    dev@corp.com                 auth.key_created       scope=ingest
-```
-
-### Data export
-
-```bash
-# CSV for accounting
-skim admin export --days 30 --out june-usage.csv
-
-# JSON for BI tools
-curl .../api/v1/export/summary.json?days=30
-```
-
-### `skim admin` CLI
-
-Full management from the command line — no browser needed.
-
-```bash
-skim admin users list
-skim admin users invite --email X --role team_admin --team platform
-skim admin budget list
-skim admin budget set --owner-type global --tokens 10000000 --period monthly
-skim admin keys list
-skim admin keys revoke sk-skim-abc1
-skim admin webhooks list
-skim admin audit --days 7 --action auth.login
 skim admin export --days 30 --out report.csv
 ```
 
-Reads `SKIM_SERVER_URL` + `SKIM_SERVER_TOKEN` from env.
+</td>
+</tr>
+</table>
 
----
+<details>
+<summary><b>Team deployment in 3 commands</b></summary>
 
-## CLI Reference
-
-```
-Static analysis (no API key needed):
-  skim scan       Audit token costs per file across your codebase
-  skim analyze    Detect waste patterns (lock files, build artifacts, etc.)
-  skim fix        Auto-write .llmignore rules — shows before/after savings
-  skim check      CI budget gate — exits 1 if over context threshold
-  skim generate   Generate .llmignore, .skimrc, and CLAUDE.md
-  skim secrets    Scan for leaked credentials before they reach an LLM
-
-Runtime:
-  skim proxy      Runtime interceptor — set ANTHROPIC_BASE_URL=http://localhost:7474
-  skim server     Web dashboard + REST API (login, charts, team usage)
-  skim admin      Manage users, budgets, keys, webhooks via server API
-
-Operations:
-  skim audit      View the local operation log (~/.skim/audit.log)
-  skim config     Manage .skimrc configuration
-  skim hooks      Install/remove git pre-commit budget gate
-  skim baseline   Save & compare token count snapshots (regression detection)
-  skim version    Print version
-```
-
-### Key flags
+<br/>
 
 ```bash
-skim proxy --port 7474 --model claude --no-filter --no-cache --no-browser
-skim server --port 7475 --host 0.0.0.0
-skim check --max-pct 30 --fail-on-waste --json
-skim fix --min-severity medium --dry-run
-skim scan --model gpt-4o --top 30 --json
-skim secrets --path . --fail          # use in CI to block leaked keys
-skim hooks install --max-pct 30 --fail-on-waste
-skim baseline save --name pre-refactor
-skim baseline compare --name pre-refactor
+# 1. Run the server (auto-creates admin, uses gunicorn if installed)
+pip install 'skim-llm[web]'
+SKIM_ADMIN_EMAIL=you@corp.com skim server --host 0.0.0.0 --port 7475
+
+# 2. Each developer connects their proxy
+export SKIM_SERVER_URL=https://skim.corp.internal
+export SKIM_SERVER_TOKEN=sk-skim-...     # generate in Settings
+
+# 3. Manage from anywhere
+skim admin users list
 ```
 
----
+**Auth:** local password · LDAP/AD (`SKIM_LDAP_*`) · Google/GitHub/Azure/Okta (`SKIM_OIDC_*`)
 
-## Configuration
+Full guide → [docs/enterprise.md](docs/enterprise.md) · [docs/deployment.md](docs/deployment.md)
 
-`.skimrc` in your project root (commit for team-wide policy):
+</details>
 
-```ini
-model         = claude       # claude | openai | gemini | ollama
-max_pct       = 30           # fail CI if context exceeds this %
-fail_on_waste = false        # also fail on HIGH severity waste patterns
-min_severity  = high         # auto-fix threshold: high | medium | low
-proxy_port    = 7474
+<br/>
+
+## ⌨️ CLI Reference
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🔬 Static analysis** &nbsp;<sub>no API key</sub>
+
+```bash
+skim scan       # token cost per file
+skim analyze    # detect waste patterns
+skim fix        # auto-write .llmignore
+skim check      # CI budget gate
+skim generate   # .llmignore + CLAUDE.md
+skim secrets    # leaked credential scan
 ```
 
-**Environment variables:**
+</td>
+<td width="50%" valign="top">
 
-| Variable | Purpose |
-|----------|---------|
-| `ANTHROPIC_BASE_URL` | Point Claude Code at the proxy |
-| `OPENAI_BASE_URL` | Point OpenAI-compatible tools at the proxy |
-| `SKIM_NO_FILTER` | Disable waste filtering (passthrough only) |
-| `SKIM_NO_CACHE` | Disable prompt caching injection |
-| `SKIM_SERVER_URL` | Central dashboard URL (enables enterprise mode) |
-| `SKIM_SERVER_TOKEN` | API key for proxy → server reporting |
-| `SKIM_JWT_SECRET` | JWT signing secret (auto-generated if unset) |
-| `SKIM_ADMIN_EMAIL` | Auto-create admin user on first server run |
-| `SKIM_ADMIN_PASSWORD` | Password for auto-created admin |
-| `SKIM_DB_PATH` | SQLite DB path (default: `~/.skim/skim.db`) |
-| `SKIM_LDAP_URL` | Enable LDAP auth |
-| `SKIM_OIDC_GOOGLE_CLIENT_ID` | Enable Google SSO |
-| `SKIM_OIDC_GITHUB_CLIENT_ID` | Enable GitHub SSO |
-| `SKIM_OIDC_AZURE_CLIENT_ID` | Enable Azure AD SSO |
+**⚙️ Runtime & ops**
 
----
+```bash
+skim proxy      # the interceptor
+skim server     # team dashboard + API
+skim admin      # manage users/budgets/keys
+skim audit      # local operation log
+skim hooks      # git pre-commit gate
+skim baseline   # token regression checks
+```
 
-## Python API
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Example — <code>skim fix</code> auto-cleanup</b></summary>
+
+<br/>
+
+```
+  skim fix  —  ./my-project
+  ──────────────────────────────────────────────────────
+  Before  : 166.8k tokens  (83.4% ctx)  $0.50/session
+
+  Pattern              Severity    Tokens saved  Rules
+  ────────────────────────────────────────────────────
+  Lock files           HIGH           160.3k     +7
+  Test snapshots       MEDIUM           4.1k     +2
+
+  ✓ Written to .llmignore
+
+  After   : 6.5k tokens  (3.2% ctx)  $0.02/session
+  Saved   : 160.3k tokens  (96.1% reduction)  $0.48/session
+  Now     : 51 sessions / $1
+```
+
+</details>
+
+<br/>
+
+## 🐍 Python API
 
 ```python
-from adapters import ClaudeAdapter, OpenAIAdapter, GeminiAdapter, OllamaAdapter
+from adapters import ClaudeAdapter
 
-# Claude with prompt caching
 claude = ClaudeAdapter(
     model="claude-sonnet-4-6",
     system_prompt="You are a terse coding assistant.",
-    enable_caching=True,
+    enable_caching=True,          # prompt caching, automatic
 )
 response = claude.chat("Refactor the auth module")
 claude.print_stats()
 # Session: 12,400 tokens | Cache hit rate: 87% | Cost: $0.0037
-
-# Subagent pattern — keeps your main context clean
-summary = claude.run_subagent(
-    "Investigate how authentication handles token refresh",
-    context_files=["src/auth/"]
-)
 ```
 
----
+<sub>Adapters: `ClaudeAdapter` · `OpenAIAdapter` · `GeminiAdapter` · `OllamaAdapter`</sub>
 
-## MCP Server
+<br/>
 
-```json
-{
-  "mcpServers": {
-    "skim": { "command": "skim-mcp" }
-  }
-}
-```
+## 📦 Install
 
-Tools: `scan_tokens`, `analyze_context`, `check_budget`, `fix_context`, `generate_llmignore`
-
----
-
-## Install
+<table>
+<tr>
+<td>
 
 ```bash
-pip install skim-llm                      # core — zero hard deps
-pip install 'skim-llm[tiktoken]'          # accurate token counting
-pip install 'skim-llm[web]'              # dashboard (Flask)
+pip install skim-llm                    # core — zero hard deps
+pip install 'skim-llm[tiktoken]'        # accurate token counting
+pip install 'skim-llm[web]'             # dashboard server
 pip install 'skim-llm[web,sso,ldap]'    # enterprise auth
 pip install 'skim-llm[all]'             # everything
 ```
 
----
+</td>
+</tr>
+</table>
 
-## Docs
+<br/>
 
-| Document | What it covers |
-|----------|----------------|
-| [docs/quickstart.md](docs/quickstart.md) | Zero to running in 2 minutes |
-| [docs/proxy.md](docs/proxy.md) | Proxy deep-dive — all features, all flags |
-| [docs/dashboard.md](docs/dashboard.md) | Local and team dashboard guide |
-| [docs/enterprise.md](docs/enterprise.md) | Budgets, webhooks, invites, RBAC, audit |
-| [docs/admin-cli.md](docs/admin-cli.md) | `skim admin` complete reference |
-| [docs/api.md](docs/api.md) | REST API reference |
-| [docs/configuration.md](docs/configuration.md) | All env vars and .skimrc options |
-| [docs/deployment.md](docs/deployment.md) | Production deployment guide |
-| [docs/mcp-setup.md](docs/mcp-setup.md) | Claude Desktop MCP integration |
+## 📚 Documentation
+
+<div align="center">
+
+| Guide | What it covers |
+|:------|:---------------|
+| [**Quickstart**](docs/quickstart.md) | Zero to running in 2 minutes |
+| [**Proxy**](docs/proxy.md) | Deep-dive — every feature, every flag |
+| [**Dashboard**](docs/dashboard.md) | Local & team dashboards |
+| [**Enterprise**](docs/enterprise.md) | Budgets, webhooks, invites, RBAC, audit |
+| [**Admin CLI**](docs/admin-cli.md) | `skim admin` complete reference |
+| [**REST API**](docs/api.md) | All 31 endpoints with schemas |
+| [**Configuration**](docs/configuration.md) | Every env var & `.skimrc` option |
+| [**Deployment**](docs/deployment.md) | Docker, systemd, nginx, scaling |
+| [**MCP Setup**](docs/mcp-setup.md) | Claude Desktop integration |
+
+</div>
+
+<br/>
+
+## 🔌 MCP Server
+
+```json
+{ "mcpServers": { "skim": { "command": "skim-mcp" } } }
+```
+
+<sub>Tools: `scan_tokens` · `analyze_context` · `check_budget` · `fix_context` · `generate_llmignore`</sub>
+
+<br/>
 
 ---
 
 <div align="center">
 
-MIT License · [GitHub](https://github.com/bb1nfosec/skim) · [PyPI](https://pypi.org/project/skim-llm/) · [Issues](https://github.com/bb1nfosec/skim/issues) · [Changelog](CHANGELOG.md)
+<sub>
+
+**[GitHub](https://github.com/bb1nfosec/skim)** · **[PyPI](https://pypi.org/project/skim-llm/)** · **[Issues](https://github.com/bb1nfosec/skim/issues)** · **[Changelog](CHANGELOG.md)** · **[Live Demo](https://demo-mu-ten-60.vercel.app)**
+
+Built for developers who'd rather not pay for noise. · MIT License
+
+</sub>
+
+<sub>⭐ Star the repo if skim saved you some tokens.</sub>
 
 </div>
