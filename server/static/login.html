@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>skim — Sign in</title>
+<style>
+:root { --bg:#0d0f14; --surface:#161920; --border:#252832;
+        --text:#e2e4ea; --muted:#7a7f8e; --accent:#6c63ff; --danger:#ff4d6d; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Inter',system-ui,sans-serif;
+       min-height:100vh; display:flex; align-items:center; justify-content:center; }
+.box { background:var(--surface); border:1px solid var(--border); border-radius:16px;
+       padding:40px; width:380px; }
+h1   { font-size:22px; font-weight:700; margin-bottom:4px; }
+.sub { color:var(--muted); font-size:13px; margin-bottom:28px; }
+.field { margin-bottom:16px; }
+.field label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px; }
+.field input { width:100%; background:var(--bg); border:1px solid var(--border);
+               color:var(--text); padding:10px 12px; border-radius:8px; font-size:14px; }
+.field input:focus { outline:none; border-color:var(--accent); }
+.err { color:var(--danger); font-size:12px; margin-top:8px; display:none; }
+.btn { width:100%; padding:11px; background:var(--accent); color:#fff;
+       border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; margin-top:8px; }
+.btn:hover { background:#5a52e0; }
+.divider { text-align:center; color:var(--muted); font-size:12px; margin:20px 0;
+           position:relative; }
+.divider::before,.divider::after { content:''; position:absolute; top:50%;
+  width:calc(50% - 20px); height:1px; background:var(--border); }
+.divider::before { left:0; } .divider::after { right:0; }
+.sso-btn { width:100%; padding:10px; border:1px solid var(--border); background:transparent;
+           color:var(--text); border-radius:8px; font-size:13px; cursor:pointer;
+           display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:10px; }
+.sso-btn:hover { border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>skim</h1>
+  <div class="sub">Token Intelligence — sign in to your workspace</div>
+  <div class="field">
+    <label>Email</label>
+    <input type="email" id="em" placeholder="you@company.com"/>
+  </div>
+  <div class="field">
+    <label>Password</label>
+    <input type="password" id="pw" placeholder="••••••••"/>
+  </div>
+  <div class="err" id="err">Invalid credentials.</div>
+  <button class="btn" onclick="login()">Sign in</button>
+  <div class="divider" id="sso-div" style="display:none">or</div>
+  <div id="sso"></div>
+</div>
+<script>
+const API = window.location.origin;
+document.getElementById('pw').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+async function login() {
+  const em = document.getElementById('em').value;
+  const pw = document.getElementById('pw').value;
+  const err = document.getElementById('err');
+  err.style.display='none';
+  const r = await fetch(`${API}/api/v1/auth/login`,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email:em, password:pw}),
+  }).then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){ err.style.display='block'; return; }
+  localStorage.setItem('skim_token', r.token);
+  window.location='/dashboard';
+}
+(async () => {
+  const r = await fetch(`${API}/api/v1/auth/oidc/providers`).then(r=>r.json()).catch(()=>null);
+  if(!r||!r.providers.length) return;
+  document.getElementById('sso-div').style.display='';
+  const icons={google:'🔵',github:'⚫',azure:'🔷',custom:'🔐'};
+  const lbls={google:'Google',github:'GitHub',azure:'Azure AD',custom:'SSO'};
+  r.providers.forEach(p=>{
+    const b=document.createElement('button');
+    b.className='sso-btn';
+    b.innerHTML=`${icons[p]||'🔐'} Continue with ${lbls[p]||p}`;
+    b.onclick=()=>window.location=`${API}/api/v1/auth/oidc/${p}/start`;
+    document.getElementById('sso').appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

@@ -3,17 +3,22 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "distill-llm"
-version = "0.1.0"
-description = "Scan any codebase, see which files are burning your Claude/GPT tokens, and the exact dollar cost — with a CI budget gate and drop-in adapters for every major LLM."
+name = "skim-llm"
+version = "0.2.0"
+description = "Runtime token proxy + optimization toolkit for LLM developers and enterprises. Intercepts API calls, strips waste in real-time, tracks costs, and serves a web dashboard."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-authors = [{ name = "bbinfosec", email = "vickytestssec@gmail.com" }]
-keywords = ["llm", "tokens", "token-optimization", "claude", "openai", "gemini", "ollama", "ai", "cost", "developer-tools"]
+authors = [{ name = "bb1nfosec", email = "vickytestssec@gmail.com" }]
+keywords = [
+    "llm", "tokens", "token-optimization", "claude", "openai", "gemini", "ollama",
+    "ai", "cost", "developer-tools", "proxy", "api-gateway", "context-window",
+    "runtime", "enterprise", "dashboard",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -21,11 +26,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Environment :: Console",
     "Operating System :: OS Independent",
 ]
 
-# Core tools (scan, analyze, check) work with zero hard dependencies
+# Core scanner + proxy work with zero hard dependencies
 dependencies = []
 
 [project.optional-dependencies]
@@ -34,35 +40,49 @@ claude   = ["anthropic>=0.40.0"]
 openai   = ["openai>=1.50.0"]
 gemini   = ["google-generativeai>=0.8.0"]
 mcp      = ["mcp>=1.0.0"]
-all      = ["tiktoken>=0.7.0", "anthropic>=0.40.0", "openai>=1.50.0", "google-generativeai>=0.8.0", "mcp>=1.0.0"]
-dev      = ["pytest>=8.0.0", "tiktoken>=0.7.0"]
+web      = ["flask>=3.0.0"]
+sso      = ["authlib>=1.3.0", "httpx>=0.27.0"]
+ldap     = ["ldap3>=2.9.0"]
+dev      = ["pytest>=8.0.0", "tiktoken>=0.7.0", "flask>=3.0.0"]
+all      = [
+    "tiktoken>=0.7.0",
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "google-generativeai>=0.8.0",
+    "mcp>=1.0.0",
+    "flask>=3.0.0",
+]
 
 [project.urls]
-Homepage   = "https://github.com/bb1nfosec/Distill"
-Repository = "https://github.com/bb1nfosec/Distill"
-Issues     = "https://github.com/bb1nfosec/Distill/issues"
-Changelog  = "https://github.com/bb1nfosec/Distill/blob/main/CHANGELOG.md"
-"Try Online" = "https://bb1nfosec.github.io/Distill"
+Homepage   = "https://github.com/bb1nfosec/skim"
+Repository = "https://github.com/bb1nfosec/skim"
+Issues     = "https://github.com/bb1nfosec/skim/issues"
+Changelog  = "https://github.com/bb1nfosec/skim/blob/main/CHANGELOG.md"
 
 [project.scripts]
-distill         = "core.cli:main"
-distill-scan    = "core.token_counter:main"
-distill-analyze = "core.context_analyzer:main"
-distill-check   = "core.check:main"
-distill-fix     = "core.fix:main"
-distill-mcp     = "distill_mcp.server:main"
+skim            = "core.cli:main"
+skim-scan       = "core.token_counter:main"
+skim-analyze    = "core.context_analyzer:main"
+skim-check      = "core.check:main"
+skim-fix        = "core.fix:main"
+skim-proxy      = "core.proxy:main"
+skim-server     = "server.app:main"
+skim-secrets    = "core.secrets_detector:main"
+skim-audit      = "core.audit:main"
+skim-mcp        = "skim_mcp.server:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["core*", "adapters*", "scripts*", "distill_mcp*"]
+where   = ["."]
+include = ["core*", "adapters*", "scripts*", "skim_mcp*", "server*"]
 
 [tool.setuptools.package-data]
-"*" = ["py.typed"]
+"server" = ["static/*.html", "static/*.css", "static/*.js"]
+"*"      = ["py.typed"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths    = ["tests"]
 python_files = ["test_*.py"]
 
 [tool.ruff]
-line-length = 100
+line-length    = 100
 target-version = "py310"

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>skim — Token Intelligence Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:        #0d0f14;
+  --surface:   #161920;
+  --border:    #252832;
+  --text:      #e2e4ea;
+  --muted:     #7a7f8e;
+  --accent:    #6c63ff;
+  --accent2:   #00d4aa;
+  --warn:      #f5a623;
+  --danger:    #ff4d6d;
+  --success:   #00d4aa;
+  --font:      'Inter', 'Segoe UI', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font);
+       font-size: 14px; line-height: 1.6; }
+
+/* Layout */
+.shell   { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border);
+           display: flex; flex-direction: column; position: fixed; height: 100vh; }
+.main    { margin-left: 220px; flex: 1; display: flex; flex-direction: column; }
+.topbar  { background: var(--surface); border-bottom: 1px solid var(--border);
+           padding: 0 28px; height: 56px; display: flex; align-items: center;
+           justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+.content { padding: 28px; flex: 1; }
+
+/* Sidebar */
+.brand   { padding: 20px 20px 16px; border-bottom: 1px solid var(--border); }
+.brand-name { font-size: 20px; font-weight: 700; color: var(--accent);
+              letter-spacing: -0.5px; }
+.brand-tag  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.nav        { padding: 12px 8px; flex: 1; }
+.nav-section { color: var(--muted); font-size: 10px; font-weight: 600;
+               text-transform: uppercase; letter-spacing: 1px;
+               padding: 12px 12px 6px; }
+.nav-item   { display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+              border-radius: 8px; color: var(--muted); cursor: pointer;
+              text-decoration: none; transition: all .15s; margin: 1px 0; }
+.nav-item:hover { background: rgba(108,99,255,.1); color: var(--text); }
+.nav-item.active { background: rgba(108,99,255,.15); color: var(--accent); }
+.nav-icon { width: 18px; text-align: center; }
+.sidebar-footer { padding: 16px; border-top: 1px solid var(--border); }
+.user-badge { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 13px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.user-info { font-size: 12px; }
+.user-name  { font-weight: 600; color: var(--text); }
+.user-role  { color: var(--muted); font-size: 11px; }
+
+/* Topbar */
+.topbar-title { font-size: 15px; font-weight: 600; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.period-select { background: var(--border); border: 1px solid var(--border);
+                 color: var(--text); padding: 6px 10px; border-radius: 6px;
+                 font-size: 13px; cursor: pointer; }
+.btn { padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500;
+       cursor: pointer; border: none; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #5a52e0; }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.card  { background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+         padding: 20px; }
+.card-label { color: var(--muted); font-size: 12px; font-weight: 500;
+              text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.card-value { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -1px; }
+.card-delta { font-size: 12px; margin-top: 6px; }
+.card-delta.up    { color: var(--danger); }
+.card-delta.down  { color: var(--success); }
+.card-delta.neutral { color: var(--muted); }
+.card-icon { float: right; font-size: 24px; opacity: .5; }
+
+/* Charts */
+.charts { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+.charts-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.chart-card { background: var(--surface); border: 1px solid var(--border);
+              border-radius: 12px; padding: 20px; }
+.chart-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 220px; }
+
+/* Table */
+.table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.table-header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+                display: flex; justify-content: space-between; align-items: center; }
+.table-title { font-size: 13px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 11px 20px; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+     letter-spacing: .5px; }
+td { font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,.02); }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+         font-size: 11px; font-weight: 600; }
+.badge-green { background: rgba(0,212,170,.15); color: var(--success); }
+.badge-red   { background: rgba(255,77,109,.15); color: var(--danger); }
+.badge-blue  { background: rgba(108,99,255,.15); color: var(--accent); }
+.badge-warn  { background: rgba(245,166,35,.15); color: var(--warn); }
+
+/* Health bar */
+.hbar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 8px; }
+.hbar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+.hbar-fill.green { background: var(--success); }
+.hbar-fill.warn  { background: var(--warn); }
+.hbar-fill.red   { background: var(--danger); }
+
+/* Login overlay */
+#login-screen { position: fixed; inset: 0; background: var(--bg);
+                display: flex; align-items: center; justify-content: center; z-index: 100; }
+.login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+             padding: 40px; width: 380px; }
+.login-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.login-sub   { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+               margin-bottom: 6px; }
+.field input { width: 100%; background: var(--bg); border: 1px solid var(--border);
+               color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 14px; }
+.field input:focus { outline: none; border-color: var(--accent); }
+.login-error { color: var(--danger); font-size: 12px; margin-top: 8px; display: none; }
+.sso-divider { text-align: center; color: var(--muted); font-size: 12px; margin: 20px 0;
+               position: relative; }
+.sso-divider::before, .sso-divider::after {
+  content: ''; position: absolute; top: 50%; width: calc(50% - 20px);
+  height: 1px; background: var(--border); }
+.sso-divider::before { left: 0; } .sso-divider::after { right: 0; }
+.sso-btn { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+           background: transparent; color: var(--text); font-size: 13px; cursor: pointer;
+           display: flex; align-items: center; justify-content: center; gap: 8px;
+           margin-bottom: 10px; transition: all .15s; }
+.sso-btn:hover { border-color: var(--accent); background: rgba(108,99,255,.05); }
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .charts { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .sidebar { width: 0; overflow: hidden; }
+  .main    { margin-left: 0; }
+  .cards   { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-title">skim</div>
+    <div class="login-sub">Token Intelligence Dashboard — sign in to continue</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="you@company.com" autocomplete="email"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="login-pw" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <div class="login-error" id="login-err">Invalid credentials. Try again.</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="doLogin()">Sign in</button>
+    <div class="sso-divider" id="sso-divider" style="display:none">or continue with</div>
+    <div id="sso-buttons"></div>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div class="shell" id="app-shell" style="display:none">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="brand">
+      <div class="brand-name">skim</div>
+      <div class="brand-tag">Token Intelligence</div>
+    </div>
+    <div class="nav">
+      <div class="nav-section">Overview</div>
+      <a class="nav-item active" onclick="showPage('overview')">
+        <span class="nav-icon">◈</span> Dashboard
+      </a>
+      <a class="nav-item" onclick="showPage('sessions')">
+        <span class="nav-icon">⚡</span> Sessions
+      </a>
+      <div class="nav-section">Analysis</div>
+      <a class="nav-item" onclick="showPage('usage')">
+        <span class="nav-icon">📊</span> Usage
+      </a>
+      <a class="nav-item" onclick="showPage('models')">
+        <span class="nav-icon">🤖</span> Models
+      </a>
+      <a class="nav-item" onclick="showPage('savings')">
+        <span class="nav-icon">💰</span> Savings
+      </a>
+      <div class="nav-section">Admin</div>
+      <a class="nav-item" id="nav-team" onclick="showPage('team')" style="display:none">
+        <span class="nav-icon">👥</span> Team
+      </a>
+      <a class="nav-item" onclick="showPage('settings')">
+        <span class="nav-icon">⚙</span> Settings
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="avatar" id="user-avatar">U</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name">Loading…</div>
+          <div class="user-role" id="user-role">—</div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-right">
+        <select class="period-select" id="period-select" onchange="changePeriod()">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button class="btn btn-ghost" onclick="refresh()">↻ Refresh</button>
+        <button class="btn btn-ghost" onclick="doLogout()">Sign out</button>
+      </div>
+    </div>
+
+    <div class="content" id="page-overview">
+      <!-- Summary Cards -->
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">📤</div>
+          <div class="card-label">Total Tokens Sent</div>
+          <div class="card-value" id="c-total">—</div>
+          <div class="card-delta neutral" id="c-calls">— API calls</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">💵</div>
+          <div class="card-label">Estimated Cost</div>
+          <div class="card-value" id="c-cost">—</div>
+          <div class="card-delta neutral" id="c-avg">avg per call</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">✂️</div>
+          <div class="card-label">Tokens Saved by skim</div>
+          <div class="card-value" id="c-saved">—</div>
+          <div class="card-delta down" id="c-savepct">— reduction</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <div class="card-label">Avg Context Fill</div>
+          <div class="card-value" id="c-fill">—</div>
+          <div class="card-delta neutral">of model limit</div>
+        </div>
+      </div>
+
+      <!-- Charts Row 1 -->
+      <div class="charts">
+        <div class="chart-card">
+          <div class="chart-title">Token Usage Over Time</div>
+          <div class="chart-wrap"><canvas id="chart-usage"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Usage by Model</div>
+          <div class="chart-wrap"><canvas id="chart-model"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Charts Row 2 -->
+      <div class="charts-row2">
+        <div class="chart-card">
+          <div class="chart-title">Tokens Saved vs Sent</div>
+          <div class="chart-wrap"><canvas id="chart-savings"></canvas></div>
+        </div>
+        <div class="chart-card" id="team-chart-card">
+          <div class="chart-title">Top Users</div>
+          <div class="chart-wrap"><canvas id="chart-users"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Recent Sessions Table -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Recent API Calls</div>
+          <span class="badge badge-blue" id="events-count">—</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th><th>Model</th><th>Tokens In</th>
+              <th>Tokens Out</th><th>Saved</th><th>Cost</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="events-table"></tbody>
+        </table>
+      </div>
+    </div><!-- end page-overview -->
+
+    <!-- Placeholder pages -->
+    <div class="content" id="page-sessions" style="display:none">
+      <p style="color:var(--muted)">Session view — coming in next release.</p>
+    </div>
+    <div class="content" id="page-usage" style="display:none">
+      <p style="color:var(--muted)">Deep usage analysis — coming in next release.</p>
+    </div>
+    <div class="content" id="page-models" style="display:none">
+      <p style="color:var(--muted)">Model comparison — coming in next release.</p>
+    </div>
+    <div class="content" id="page-savings" style="display:none">
+      <p style="color:var(--muted)">Savings report — coming in next release.</p>
+    </div>
+    <div class="content" id="page-team" style="display:none">
+      <p style="color:var(--muted)">Team management — coming in next release.</p>
+    </div>
+    <div class="content" id="page-settings" style="display:none">
+      <div class="chart-card" style="max-width:520px">
+        <div class="chart-title" style="margin-bottom:16px">Account Settings</div>
+        <p style="color:var(--muted);margin-bottom:16px;font-size:13px">
+          Generate an API key to connect the skim proxy to this dashboard.
+        </p>
+        <button class="btn btn-primary" onclick="createApiKey()">Generate API Key</button>
+        <div id="new-key" style="margin-top:16px;display:none">
+          <div style="color:var(--muted);font-size:12px;margin-bottom:6px">
+            Copy this key now — it won't be shown again.
+          </div>
+          <code id="new-key-val" style="background:var(--bg);padding:10px 14px;border-radius:8px;
+            display:block;word-break:break-all;font-size:13px;border:1px solid var(--border)">
+          </code>
+          <div style="color:var(--muted);font-size:12px;margin-top:12px">
+            Then set these env vars before running <code>skim proxy</code>:
+          </div>
+          <pre style="background:var(--bg);padding:10px 14px;border-radius:8px;
+            font-size:12px;margin-top:8px;border:1px solid var(--border);overflow-x:auto">
+export SKIM_SERVER_URL=<span id="srv-url-hint"></span>
+export SKIM_SERVER_TOKEN=<span id="key-hint"></span></pre>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end main -->
+</div><!-- end shell -->
+
+<script>
+const API = window.location.origin;
+let _token = localStorage.getItem('skim_token') || '';
+let _user  = null;
+let _charts = {};
+let _days   = 30;
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${_token}`,
+      ...(opts.headers || {}),
+    },
+  });
+  if (res.status === 401) { doLogout(); return null; }
+  return res.json();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const pw    = document.getElementById('login-pw').value;
+  const err   = document.getElementById('login-err');
+  err.style.display = 'none';
+  const data = await fetch(`${API}/api/v1/auth/login`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({email, password: pw}),
+  }).then(r => r.json()).catch(() => null);
+
+  if (!data || data.error) {
+    err.style.display = 'block';
+    return;
+  }
+  _token = data.token;
+  _user  = data.user;
+  localStorage.setItem('skim_token', _token);
+  bootApp();
+}
+
+document.getElementById('login-pw').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+function doLogout() {
+  localStorage.removeItem('skim_token');
+  _token = '';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-shell').style.display    = 'none';
+}
+
+async function checkAuth() {
+  if (!_token) return false;
+  const data = await api('/api/v1/auth/me');
+  if (!data || data.error) return false;
+  _user = data.user;
+  return true;
+}
+
+async function loadOidcProviders() {
+  const data = await fetch(`${API}/api/v1/auth/oidc/providers`).then(r=>r.json()).catch(()=>null);
+  if (!data || !data.providers || !data.providers.length) return;
+  document.getElementById('sso-divider').style.display = '';
+  const icons = {google:'🔵', github:'⚫', azure:'🔷', custom:'🔐'};
+  const labels = {google:'Continue with Google', github:'Continue with GitHub',
+                  azure:'Continue with Azure AD', custom:'Continue with SSO'};
+  const wrap = document.getElementById('sso-buttons');
+  data.providers.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'sso-btn';
+    b.innerHTML = `${icons[p]||'🔐'} ${labels[p]||p}`;
+    b.onclick = () => window.location = `${API}/api/v1/auth/oidc/${p}/start`;
+    wrap.appendChild(b);
+  });
+}
+
+// ── App boot ─────────────────────────────────────────────────────────────
+async function bootApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-shell').style.display    = 'flex';
+  renderUser();
+  if (_user && _user.role === 'admin') {
+    document.getElementById('nav-team').style.display = '';
+  }
+  await refresh();
+}
+
+function renderUser() {
+  if (!_user) return;
+  const initials = (_user.name || _user.email || 'U').charAt(0).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('user-name').textContent   = _user.name || _user.email;
+  document.getElementById('user-role').textContent   = _user.role;
+  document.getElementById('srv-url-hint').textContent = API;
+}
+
+// ── Pages ─────────────────────────────────────────────────────────────────
+const PAGES = ['overview','sessions','usage','models','savings','team','settings'];
+function showPage(name) {
+  PAGES.forEach(p => {
+    document.getElementById(`page-${p}`).style.display = p === name ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-title').textContent =
+    {overview:'Dashboard', sessions:'Sessions', usage:'Usage', models:'Models',
+     savings:'Savings', team:'Team', settings:'Settings'}[name] || name;
+  if (name === 'overview') refresh();
+}
+
+function changePeriod() {
+  _days = parseInt(document.getElementById('period-select').value);
+  refresh();
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────
+async function refresh() {
+  const [summary, daily, byModel, byUser, events] = await Promise.all([
+    api(`/api/v1/stats/summary?days=${_days}`),
+    api(`/api/v1/stats/daily?days=${_days}`),
+    api(`/api/v1/stats/by-model?days=${_days}`),
+    _user && _user.role === 'admin' ? api(`/api/v1/stats/by-user?days=${_days}`) : null,
+    api(`/api/v1/events?days=${_days}&limit=50`),
+  ]);
+
+  if (summary) renderSummary(summary);
+  if (daily)   renderUsageChart(daily.data || []);
+  if (byModel) renderModelChart(byModel.data || []);
+  if (daily)   renderSavingsChart(daily.data || []);
+  if (byUser)  renderUsersChart(byUser.data || []);
+  if (events)  renderEvents(events.events || []);
+}
+
+// ── Cards ─────────────────────────────────────────────────────────────────
+function fmtN(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1)+'k';
+  return String(Math.round(n||0));
+}
+function fmtCost(v) {
+  if (!v) return '$0.00';
+  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+}
+
+function renderSummary(s) {
+  document.getElementById('c-total').textContent  = fmtN(s.total_input || 0);
+  document.getElementById('c-calls').textContent  = `${s.total_calls||0} API calls`;
+  document.getElementById('c-cost').textContent   = fmtCost(s.total_cost);
+  const avg = s.total_calls ? (s.total_cost/s.total_calls) : 0;
+  document.getElementById('c-avg').textContent    = `${fmtCost(avg)} avg/call`;
+  document.getElementById('c-saved').textContent  = fmtN(s.total_saved || 0);
+  const savePct = s.total_input ? ((s.total_saved||0)/s.total_input*100).toFixed(1) : 0;
+  document.getElementById('c-savepct').textContent = `${savePct}% reduction`;
+  const fillPct = s.avg_input ? (s.avg_input / 200000 * 100).toFixed(0) : 0;
+  document.getElementById('c-fill').textContent   = `${fillPct}%`;
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────
+const C = { accent:'#6c63ff', green:'#00d4aa', warn:'#f5a623', red:'#ff4d6d',
+            blue:'#3b82f6', grid:'rgba(255,255,255,.05)', text:'#7a7f8e' };
+
+function mkChart(id, type, data, opts = {}) {
+  const el = document.getElementById(id);
+  if (_charts[id]) _charts[id].destroy();
+  _charts[id] = new Chart(el, { type, data, options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: C.text, font: { size: 12 } } } },
+    scales: type !== 'doughnut' ? {
+      x: { grid: { color: C.grid }, ticks: { color: C.text, font: { size: 11 } } },
+      y: { grid: { color: C.grid }, ticks: { color: C.text, font: { size: 11 },
+            callback: v => fmtN(v) } },
+    } : undefined,
+    ...opts,
+  }});
+}
+
+function renderUsageChart(rows) {
+  const labels = rows.map(r => r.day.slice(5));
+  mkChart('chart-usage', 'line', {
+    labels,
+    datasets: [{
+      label: 'Input tokens',
+      data: rows.map(r => r.input_tokens || 0),
+      borderColor: C.accent, backgroundColor: 'rgba(108,99,255,.1)',
+      fill: true, tension: 0.4, pointRadius: 3,
+    }],
+  });
+}
+
+function renderModelChart(rows) {
+  const colors = [C.accent, C.green, C.warn, C.red, C.blue, '#a78bfa', '#fb923c'];
+  mkChart('chart-model', 'doughnut', {
+    labels: rows.map(r => r.model || 'unknown'),
+    datasets: [{
+      data: rows.map(r => r.input_tokens || 0),
+      backgroundColor: colors.slice(0, rows.length),
+      borderWidth: 0,
+    }],
+  }, { plugins: { legend: { position: 'right', labels: { color: C.text } } } });
+}
+
+function renderSavingsChart(rows) {
+  const labels = rows.map(r => r.day.slice(5));
+  mkChart('chart-savings', 'bar', {
+    labels,
+    datasets: [
+      { label: 'Sent', data: rows.map(r => r.input_tokens||0),
+        backgroundColor: 'rgba(108,99,255,.5)' },
+      { label: 'Saved by skim', data: rows.map(r => r.saved_tokens||0),
+        backgroundColor: 'rgba(0,212,170,.5)' },
+    ],
+  });
+}
+
+function renderUsersChart(rows) {
+  if (!rows || !rows.length) {
+    document.getElementById('team-chart-card').style.display = 'none';
+    return;
+  }
+  const top = rows.slice(0, 8);
+  mkChart('chart-users', 'bar', {
+    labels: top.map(r => r.user_name || 'anon'),
+    datasets: [{
+      label: 'Tokens',
+      data: top.map(r => r.input_tokens || 0),
+      backgroundColor: C.accent,
+    }],
+  }, { indexAxis: 'y' });
+}
+
+function renderEvents(events) {
+  document.getElementById('events-count').textContent = `${events.length} events`;
+  const tbody = document.getElementById('events-table');
+  if (!events.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:24px">No events yet. Start the skim proxy to capture usage.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = events.map(e => {
+    const saved = e.saved_tokens || 0;
+    const badge = saved > 0
+      ? `<span class="badge badge-green">−${fmtN(saved)}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    const ts = (e.ts||'').slice(11,19);
+    return `<tr>
+      <td>${ts}</td>
+      <td><span class="badge badge-blue">${e.model||'—'}</span></td>
+      <td>${fmtN(e.input_tokens)}</td>
+      <td>${fmtN(e.output_tokens)}</td>
+      <td>${badge}</td>
+      <td>${fmtCost(e.cost_usd)}</td>
+      <td><span class="badge badge-green">ok</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────
+async function createApiKey() {
+  const data = await api('/api/v1/auth/keys', {method:'POST', body: JSON.stringify({label:'proxy'})});
+  if (!data || !data.key) return;
+  document.getElementById('new-key').style.display = '';
+  document.getElementById('new-key-val').textContent = data.key;
+  document.getElementById('key-hint').textContent = data.key;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(async () => {
+  loadOidcProviders();
+  if (_token && await checkAuth()) {
+    bootApp();
+  }
+})();
+</script>
+</body>
+</html>
